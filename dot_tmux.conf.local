@@ -405,6 +405,9 @@ bind C-o send-prefix
 set -g allow-passthrough all
 set -s set-clipboard on
 
+# Show hostname:command in window titles
+set -g automatic-rename-format '#h:#{pane_current_command}'
+
 # if you don't want Oh my tmux! to alter a binding or a setting, use #!important
 # bind c new-window -c '#{pane_current_path}' #!important
 

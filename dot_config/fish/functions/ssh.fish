@@ -22,7 +22,7 @@ function ssh --wraps=ssh --description 'ssh with tmux window rename'
         if test -n "$host"
             # Strip user@ prefix if present
             set -l display_host (string replace -r '.*@' '' $host)
-            tmux rename-window "$display_host"
+            tmux rename-window "$display_host:ssh"
         end
     end
 
