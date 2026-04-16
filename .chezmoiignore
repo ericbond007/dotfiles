@@ -1,0 +1,5 @@
+.config/fish/fish_variables
+.config/fish/completions
+.config/fish/conf.d
+.tmux
+.tmux/**
