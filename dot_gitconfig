@@ -3,3 +3,7 @@
 	name = Eric Bond
 [init]
 	defaultBranch = master
+[pager]
+	branch = false
+[push]
+	autoSetupRemote = true
