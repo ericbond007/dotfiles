@@ -7,6 +7,10 @@
 #         Copyright 2012— Gregory Pakosz (@gpakosz).
 
 
+# -- shell ---------------------------------------------------------------------
+
+set -g default-shell /usr/bin/fish
+
 # -- bindings ------------------------------------------------------------------
 
 # preserve tmux stock bindings,

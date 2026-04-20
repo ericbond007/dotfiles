@@ -1,100 +1,18 @@
 {{ if stat "/usr/share/cachyos-fish-config/cachyos-config.fish" }}
 source /usr/share/cachyos-fish-config/cachyos-config.fish
 {{ end }}
-
-## Custom config
+set -gx EDITOR vi
 alias vi='nvim'
 alias reload='source ~/.config/fish/config.fish'
 fnm env --use-on-cd | source
 
-{{ if not (stat "/usr/share/cachyos-fish-config/cachyos-config.fish") }}
-# Portable config sourced from CachyOS defaults (for non-CachyOS machines)
-
-# Format man pages with bat
-set -x MANROFFOPT "-c"
-set -x MANPAGER "sh -c 'col -bx | bat -l man -p'"
-
-# Add ~/.local/bin to PATH
-if test -d ~/.local/bin
-    if not contains -- ~/.local/bin $PATH
-        set -p PATH ~/.local/bin
-    end
+# 1Password Service Account — sourced from file, not hardcoded
+if test -r /etc/op-service-account-token
+    set -gx OP_SERVICE_ACCOUNT_TOKEN (cat /etc/op-service-account-token)
 end
 
-# Functions for !! and !$ https://github.com/oh-my-fish/plugin-bang-bang
-function __history_previous_command
-  switch (commandline -t)
-  case "!"
-    commandline -t $history[1]; commandline -f repaint
-  case "*"
-    commandline -i !
-  end
-end
-
-function __history_previous_command_arguments
-  switch (commandline -t)
-  case "!"
-    commandline -t ""
-    commandline -f history-token-search-backward
-  case "*"
-    commandline -i '$'
-  end
-end
-
-if [ "$fish_key_bindings" = fish_vi_key_bindings ];
-  bind -Minsert ! __history_previous_command
-  bind -Minsert '$' __history_previous_command_arguments
-else
-  bind ! __history_previous_command
-  bind '$' __history_previous_command_arguments
-end
-
-# Fish command history with timestamps
-function history
-    builtin history --show-time='%F %T '
-end
-
-function backup --argument filename
-    cp $filename $filename.bak
-end
-
-# Copy DIR1 DIR2
-function copy
-    set count (count $argv | tr -d \n)
-    if test "$count" = 2; and test -d "$argv[1]"
-        set from (echo $argv[1] | trim-right /)
-        set to (echo $argv[2])
-        command cp -r $from $to
-    else
-        command cp $argv
-    end
-end
-
-# Replace ls with eza
-alias ls='eza -al --color=always --group-directories-first --icons'
-alias la='eza -a --color=always --group-directories-first --icons'
-alias ll='eza -l --color=always --group-directories-first --icons'
-alias lt='eza -aT --color=always --group-directories-first --icons'
-alias l.="eza -a | grep -e '^\.'"
-
-# Navigation
-alias ..='cd ..'
-alias ...='cd ../..'
-alias ....='cd ../../..'
-alias .....='cd ../../../..'
-alias ......='cd ../../../../..'
-
-# Common use
-alias tarnow='tar -acf '
-alias untar='tar -zxvf '
-alias wget='wget -c '
-alias psmem='ps auxf | sort -nr -k 4'
-alias psmem10='ps auxf | sort -nr -k 4 | head -10'
-alias dir='dir --color=auto'
-alias vdir='vdir --color=auto'
-alias grep='grep --color=auto'
-alias fgrep='fgrep --color=auto'
-alias egrep='egrep --color=auto'
-alias please='sudo'
-alias tb='nc termbin.com 9999'
-{{ end }}
+# overwrite greeting
+# potentially disabling fastfetch
+#function fish_greeting
+#    # smth smth
+#end
