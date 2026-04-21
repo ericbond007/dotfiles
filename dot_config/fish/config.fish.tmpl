@@ -4,6 +4,8 @@ source /usr/share/cachyos-fish-config/cachyos-config.fish
 set -gx EDITOR vi
 alias vi='nvim'
 alias reload='source ~/.config/fish/config.fish'
+set -gx VISUAL nvim
+set -gx EDITOR nvim
 fnm env --use-on-cd | source
 
 # 1Password Service Account — sourced from file, not hardcoded
