@@ -43,7 +43,31 @@
         "hooks": [
           { "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" }
         ]
-      }
+      }{{ if eq .chezmoi.hostname "wanda" }},
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/firewall-validate.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/pre-commit-secrets-scan.sh" }
+        ]
+      }{{ end }}
     ],
     "PostToolUse": [
       {
@@ -51,7 +75,19 @@
         "hooks": [
           { "type": "command", "command": "~/.claude/hooks/chezmoi-readd.sh" }
         ]
-      }
+      }{{ if eq .chezmoi.hostname "wanda" }},
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/wiki-update-reminder.sh" }
+        ]
+      }{{ end }}
     ],
     "SessionEnd": [
       {
