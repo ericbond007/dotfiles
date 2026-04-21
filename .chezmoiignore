@@ -3,3 +3,4 @@
 .config/fish/conf.d
 .tmux
 .tmux/**
+.claude/hooks/*.log
