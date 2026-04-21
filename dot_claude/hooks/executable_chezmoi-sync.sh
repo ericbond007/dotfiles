@@ -1,53 +1,55 @@
 #!/usr/bin/env bash
-# SessionEnd hook: auto-commit any pending chezmoi source changes, push to
-# origin, then ssh to peer hosts and run `chezmoi update` so every machine
-# converges on the same state.
+# Manually-invoked fleet sync for chezmoi.
 #
-# All output is logged to ~/.claude/hooks/chezmoi-sync.log.
-# SSH per-host has a timeout so a down host can't hang session teardown.
+# Run AFTER you've reviewed and committed your chezmoi source changes.
+# This script does NOT auto-commit — it expects a clean working tree.
+# It pushes to origin, then tells each peer host to `chezmoi update`.
+#
+# Safe to re-run: no-ops if nothing to push, surfaces any peer errors.
 
 set -u
 
-LOG=~/.claude/hooks/chezmoi-sync.log
-exec >>"$LOG" 2>&1
+self=$(hostname -s)
+peers=(serp wanda flattop)
 
-printf '\n=== SessionEnd sync at %s on %s ===\n' "$(date -Iseconds)" "$(hostname)"
+printf '=== chezmoi fleet sync from %s at %s ===\n' "$self" "$(date -Iseconds)"
 
-src=$(chezmoi source-path 2>/dev/null) || { echo 'no chezmoi source-path'; exit 0; }
-[ -z "$src" ] && { echo 'empty chezmoi source-path'; exit 0; }
+src=$(chezmoi source-path 2>/dev/null) || { echo 'error: no chezmoi source-path'; exit 1; }
+cd "$src" || { echo "error: cannot cd $src"; exit 1; }
 
-cd "$src" || { echo "cannot cd $src"; exit 0; }
-
-# 1. Commit any uncommitted changes (includes re-added files from PostToolUse).
+# 1. Refuse to proceed if working tree is dirty — user should commit first.
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-    git add -A
-    files=$(git diff --cached --name-only | head -5 | paste -sd, -)
-    extra=""
-    total=$(git diff --cached --name-only | wc -l)
-    [ "$total" -gt 5 ] && extra=" (+$((total - 5)) more)"
-    msg="Auto-sync from $(hostname): $files$extra"
-    echo "committing: $msg"
-    git commit -m "$msg" || echo "commit failed"
-else
-    echo 'no local changes to commit'
+    echo 'error: uncommitted changes in chezmoi source. Commit them first, then re-run.'
+    git status --short
+    exit 1
 fi
 
-# 2. Push if ahead of origin.
+# 2. Fetch + push if ahead.
+git fetch --quiet origin
 ahead=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
-if [ "$ahead" != "0" ] && [ -n "$ahead" ]; then
-    echo "pushing $ahead commit(s) to origin"
-    git push origin HEAD || echo 'push failed'
-else
-    echo 'nothing to push'
+behind=$(git rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
+
+if [ "$behind" != "0" ]; then
+    echo "warning: local is $behind commit(s) behind origin. Pull/rebase before pushing."
+    exit 1
 fi
 
-# 3. Tell peer hosts to pull and apply. Skip self.
-self=$(hostname)
-for h in serp wanda flattop; do
-    [ "$h" = "$self" ] && continue
-    echo "--- $h ---"
-    timeout 20 ssh -o BatchMode=yes -o ConnectTimeout=5 "$h" 'chezmoi update 2>&1 | tail -20' \
-        || echo "[$h] sync failed or timed out"
+if [ "$ahead" != "0" ]; then
+    echo "pushing $ahead commit(s) to origin..."
+    git push origin HEAD || { echo 'error: push failed'; exit 1; }
+else
+    echo 'already up to date with origin'
+fi
+
+# 3. Tell each peer host to pull and apply. Skip self.
+for h in "${peers[@]}"; do
+    if [ "$h" = "$self" ]; then
+        continue
+    fi
+    printf '\n--- %s ---\n' "$h"
+    if ! timeout 30 ssh -o BatchMode=yes -o ConnectTimeout=5 "$h" 'chezmoi update'; then
+        printf '[%s] update failed or timed out\n' "$h"
+    fi
 done
 
-echo 'done'
+printf '\n=== sync complete ===\n'
