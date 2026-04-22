@@ -11,6 +11,7 @@ return {
       "prettier",
       "prettierd",
       "pyright",
+      "stylelint-lsp",
       "stylua",
     },
   },

@@ -43,6 +43,7 @@ return {
         { "<leader>t", group = "+toggle" },
         { "<leader>l", group = "+lsp" },
         { "<leader>j", group = "+json" },
+        { "<leader>?", group = "+help" },
       },
     },
   },
