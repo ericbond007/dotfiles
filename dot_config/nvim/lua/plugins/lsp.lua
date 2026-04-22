@@ -39,7 +39,15 @@ return {
       angularls = {},
       html = {},
       jsonls = {},
-      stylelint_lsp = {},
+      stylelint_lsp = {
+        settings = {
+          stylelintplus = {
+            autoFixOnFormat = true,
+            autoFixOnSave = true,
+            validateOnSave = true,
+          },
+        },
+      },
     },
     inlay_hints = { enabled = true },
   },
