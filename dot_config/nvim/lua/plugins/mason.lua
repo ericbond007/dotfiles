@@ -7,7 +7,6 @@ return {
       "firefox-debug-adapter",
       "js-debug-adapter",
       "jsonlint",
-      "misspell",
       "prettier",
       "prettierd",
       "pyright",
