@@ -21,5 +21,5 @@ case "$src_path" in
     *.tmpl) exit 0 ;;
 esac
 
-chezmoi re-add --quiet -- "$file_path" 2>/dev/null || true
+chezmoi re-add -- "$file_path" || true
 exit 0
