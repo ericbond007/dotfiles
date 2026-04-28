@@ -10,7 +10,7 @@
 set -u
 
 self=$(hostname -s)
-peers=(serp wanda flattop)
+peers=(serp wanda flattop living-pi)
 
 printf '=== chezmoi fleet sync from %s at %s ===\n' "$self" "$(date -Iseconds)"
 
