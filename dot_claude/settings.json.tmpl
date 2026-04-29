@@ -22,12 +22,21 @@
     "code-simplifier@claude-plugins-official": true,
     "github@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
+    "playwright@claude-plugins-official": {{ if eq .chezmoi.hostname "flattop" }}false{{ else }}true{{ end }},
     "skill-creator@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
   "effortLevel": "high",
+  "editorMode": "vim",
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true,{{ if eq .chezmoi.hostname "flattop" }}
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--browser", "chrome", "--executable-path", "/usr/bin/chromium"]
+    }
+  },{{ end }}
   "hooks": {
     "Notification": [
       {
