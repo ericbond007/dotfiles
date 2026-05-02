@@ -4,3 +4,7 @@
 .tmux
 .tmux/**
 .claude/hooks/*.log
+{{ if ne .chezmoi.hostname "flattop" -}}
+.local/share/legion-flattop
+.local/share/legion-flattop/**
+{{ end -}}

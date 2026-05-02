@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = lenovolegionlinux-dkms
+
+[Action]
+Description = Patching lenovolegionlinux source for PNP0C09 -> VPC2004 (acpi-ec collision workaround)
+When = PostTransaction
+Exec = /usr/local/sbin/legion-vpc2004-patch.sh

@@ -1,0 +1,14 @@
+[Unit]
+Description=Lenovo Legion fan-max via patched legion-laptop
+Documentation=https://github.com/johnfanv2/LenovoLegionLinux
+After=systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/legion-fancontrol-setup.sh
+
+[Install]
+WantedBy=multi-user.target
