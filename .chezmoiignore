@@ -4,6 +4,11 @@
 .tmux
 .tmux/**
 .claude/hooks/*.log
+
+# nvim's lazy.nvim regenerates this with per-host commit pins on every plugin
+# update — let each host own its copy.
+.config/nvim/lazy-lock.json
+
 {{ if ne .chezmoi.hostname "flattop" -}}
 .local/share/legion-flattop
 .local/share/legion-flattop/**
