@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = lenovolegionlinux-dkms
+
+[Action]
+Description = Re-applying legion-laptop patches (PNP0C09→VPC2004 + EC powermode + validator) and rebuilding DKMS
+When = PostTransaction
+Exec = /opt/services/legion-flattop/bin/legion-flattop-patches.sh

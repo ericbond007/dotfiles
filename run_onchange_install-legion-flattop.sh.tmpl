@@ -1,31 +1,54 @@
 {{- if eq .chezmoi.hostname "flattop" -}}
 #!/usr/bin/env bash
-# Installs the legion-flattop system files (kernel-module patcher,
-# fan-max systemd unit, modprobe options, pacman hook) from the chezmoi-
-# managed source copies in ~/.local/share/legion-flattop/ to their system
-# locations. Re-runs whenever any tracked source changes (via the embedded
-# checksums below).
+# Installs the legion-flattop system files (kernel-module patcher, fan-curve
+# systemd unit, modprobe options, pacman hook) from the chezmoi-managed source
+# copies in ~/.local/share/legion-flattop/ to:
+#
+#   /opt/services/legion-flattop/bin/  — scripts (per fleet convention)
+#   /etc/modprobe.d/                   — kernel-module options (force=1)
+#   /etc/pacman.d/hooks/               — pacman PostTransaction hook
+#   /etc/systemd/system/               — boot-time fan-curve service
+#   /usr/lib/systemd/system-sleep/     — resume hook (re-applies curve after wake)
+#
+# Re-runs whenever any tracked source changes (via the embedded checksums below).
+# Also handles migration from previous layouts:
+#   /usr/local/sbin/legion-{vpc2004-patch,fancontrol-setup}.sh   (very old)
+#   /opt/services/legion-laptop/                                 (intermediate)
 #
 # Source file checksums:
-# legion-vpc2004-patch.sh: {{ include "dot_local/share/legion-flattop/executable_legion-vpc2004-patch.sh" | sha256sum }}
-# legion-fancontrol-setup.sh: {{ include "dot_local/share/legion-flattop/executable_legion-fancontrol-setup.sh" | sha256sum }}
-# zz-legion-vpc2004-patch.hook: {{ include "dot_local/share/legion-flattop/zz-legion-vpc2004-patch.hook" | sha256sum }}
+# legion-flattop-patches.sh: {{ include "dot_local/share/legion-flattop/executable_legion-flattop-patches.sh" | sha256sum }}
+# legion-fan-curve.sh: {{ include "dot_local/share/legion-flattop/executable_legion-fan-curve.sh" | sha256sum }}
+# zz-legion-flattop-patches.hook: {{ include "dot_local/share/legion-flattop/zz-legion-flattop-patches.hook" | sha256sum }}
 # legion-laptop.conf: {{ include "dot_local/share/legion-flattop/legion-laptop.conf" | sha256sum }}
-# legion-fancontrol.service: {{ include "dot_local/share/legion-flattop/legion-fancontrol.service" | sha256sum }}
+# legion-fan-curve.service: {{ include "dot_local/share/legion-flattop/legion-fan-curve.service" | sha256sum }}
+# legion-flattop-resume: {{ include "dot_local/share/legion-flattop/executable_legion-flattop-resume" | sha256sum }}
 
 set -euo pipefail
 SRC="$HOME/.local/share/legion-flattop"
 
-sudo install -m 0755 "$SRC/legion-vpc2004-patch.sh"      /usr/local/sbin/legion-vpc2004-patch.sh
-sudo install -m 0755 "$SRC/legion-fancontrol-setup.sh"   /usr/local/sbin/legion-fancontrol-setup.sh
-sudo install -m 0644 "$SRC/zz-legion-vpc2004-patch.hook" /etc/pacman.d/hooks/zz-legion-vpc2004-patch.hook
-sudo install -m 0644 "$SRC/legion-laptop.conf"           /etc/modprobe.d/legion-laptop.conf
-sudo install -m 0644 "$SRC/legion-fancontrol.service"    /etc/systemd/system/legion-fancontrol.service
+# Migration: clean up earlier layouts.
+sudo systemctl disable --now legion-fancontrol.service 2>/dev/null || true
+sudo rm -f /etc/systemd/system/legion-fancontrol.service \
+           /etc/pacman.d/hooks/zz-legion-vpc2004-patch.hook \
+           /etc/pacman.d/hooks/zz-legion-laptop-patches.hook \
+           /usr/local/sbin/legion-vpc2004-patch.sh \
+           /usr/local/sbin/legion-fancontrol-setup.sh
+sudo rm -rf /opt/services/legion-laptop
+
+# Install to /opt/services/legion-flattop/ per fleet convention.
+sudo install -d -m 0755 /opt/services/legion-flattop/bin
+sudo install -m 0755 "$SRC/legion-flattop-patches.sh"  /opt/services/legion-flattop/bin/legion-flattop-patches.sh
+sudo install -m 0755 "$SRC/legion-fan-curve.sh"        /opt/services/legion-flattop/bin/legion-fan-curve.sh
+sudo install -m 0644 "$SRC/zz-legion-flattop-patches.hook" /etc/pacman.d/hooks/zz-legion-flattop-patches.hook
+sudo install -m 0644 "$SRC/legion-laptop.conf"         /etc/modprobe.d/legion-laptop.conf
+sudo install -m 0644 "$SRC/legion-fan-curve.service"   /etc/systemd/system/legion-fan-curve.service
+sudo install -m 0755 "$SRC/legion-flattop-resume"      /usr/lib/systemd/system-sleep/legion-flattop
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now legion-fancontrol.service
+sudo systemctl enable legion-fan-curve.service
+sudo systemctl restart legion-fan-curve.service
 
-echo "legion-flattop: system files installed"
+echo "legion-flattop: installed to /opt/services/legion-flattop/, fan-curve service enabled"
 {{- else -}}
 #!/usr/bin/env bash
 # legion-flattop fixes only apply on flattop (Lenovo Legion 7 16ACHg6); skipping.
