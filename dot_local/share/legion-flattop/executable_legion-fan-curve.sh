@@ -15,19 +15,19 @@
 # We map our 9 inputs (p1..p9) to occupy that range and accept the shift.
 #
 #   Tctl ≤ 55 °C  →  fans off (silent at idle / light load)
-#   Tctl 60 °C    →  ~10 % PWM (whisper)
-#   Tctl 65 °C    →  ~16 % (quiet)
-#   Tctl 70 °C    →  ~24 % (low whir)
-#   Tctl 75 °C    →  ~35 % (moderate)
-#   Tctl 80 °C    →  ~51 % (firm — "we actually need cooling" range)
-#   Tctl 85 °C    →  ~71 %
-#   Tctl 90 °C    →  ~90 %
+#   Tctl 60 °C    →  ~6 % PWM (barely audible)
+#   Tctl 65 °C    →  ~10 % (quiet)
+#   Tctl 70 °C    →  ~16 % (low whir)
+#   Tctl 75 °C    →  ~25 % (moderate)
+#   Tctl 80 °C    →  ~39 % (firm — "we actually need cooling" range)
+#   Tctl 85 °C    →  ~63 %
+#   Tctl 90 °C    →  ~86 %
 #   Tctl ≥ 100 °C →  100 % (rotors physically cap at ~5500 RPM well before this)
 #
 # These are the PWM values written to EC RAM; the legion-laptop driver scales
 # them up (roughly 1.2× at high values, 2× at low values) before they take
 # effect, so steady-state fan response is more aggressive than the raw
-# percentages above suggest — at 80 °C expect ~73 % delivered duty cycle.
+# percentages above suggest — at 80 °C expect ~57 % delivered duty cycle.
 #
 # Sequence is load-bearing: at boot ideapad_acpi binds VPC2004:00 before us,
 # so we unload it, modprobe legion-laptop, then reload ideapad (which then
@@ -75,7 +75,7 @@ echo 255 > "$VPC/powermode"
 # 3. Program the curve. Each write is a read-modify-write of the whole 10-point
 #    curve in EC RAM. PWM values are 0-255; the EC reports back as RPM-of-100.
 declare -a TEMP=(50 55 60 65 70 75 80 85 90 100)
-declare -a PWM=( 0  0 25 40 60  90 130 180 230 255)
+declare -a PWM=( 0  0 15 25 40  65 100 160 220 255)
 for i in 1 2 3 4 5 6 7 8 9 10; do
     echo "${TEMP[$((i-1))]}" > "$HWMON/pwm1_auto_point${i}_temp"
     echo "${PWM[$((i-1))]}"  > "$HWMON/pwm1_auto_point${i}_pwm"
