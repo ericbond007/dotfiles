@@ -92,19 +92,49 @@ labels != 16
 
 Done = strictly hidden outside Shipped: every non-kanban view (List, Table, Gantt, filtered views) appends `done = false`. Kanban views NEVER filter on done — that empties the Shipped column.
 
+## Title format + description + severity (mandatory conventions)
+
+Every task in every project follows three rules. Apply at create time AND retroactively if you find violators.
+
+**1. Title format**: `<emoji> #<task_id> — <descriptive title>` — always include the literal `#<id>` so tasks are referenceable in chat ("close #287" / "what's #266 about?"). The emoji marks severity at a glance.
+
+| Tier | Priority | Emoji | When |
+|---|---|---|---|
+| High security / vuln residual / actively-broken-with-user-impact | 4 (or 5 for critical) | 🔴 | Open audit High findings; CSP/auth/data-corruption bugs; outages |
+| Bug (label `bug`) | 3 | 🔴 | Anything labeled `bug`. Emoji marks bug regardless of true sev — frontend renders priority 3 mid-tone, the 🔴 + label make severity unambiguous |
+| Medium ops / audit non-bug | 3 | 🟡 | Reliability work, audit Mediums, refactors with risk |
+| Low / Info / hygiene | 1 | ⚪ | Audit Lows + Info, dep bumps, polish |
+| Backlog / research / feature idea | 0 | (no emoji) | `deferred`-labeled or pre-spec ideas |
+
+Strip redundant `bug:` / `BUG:` / `todo:` prefixes from titles — the emoji + label do that work.
+
+**2. Description required**. No empty bodies. At minimum one sentence saying what the task is + (for non-trivial tasks) why it matters. For audit-derived tasks, link the finding ID (F-NNN). For bugs, include repro steps if known. If the task came in as a one-line title (Dave often files quick-capture asks), fill in a short description from context the next time you sync — keep a `_(extrapolated; refine if wrong)_` tag if extrapolating.
+
+**3. Priority** matches the severity tier above. Don't pile every task at priority 3 — the kanban becomes unreadable. Default for non-bug, non-security work is **priority 1** (low/hygiene); reserve 3+ for things that genuinely need attention this week.
+
 ## Common operations — recipe block
 
-### Create a task
+### Create a task (two-step: PUT, then POST to add `#<id>`)
+
+The `#<id>` part of the title needs the task id, which only exists after PUT. So create-then-rename:
 
 ```python
+# Step 1: PUT to get the id back. Use the descriptive title (no #<id> yet).
 t = http("PUT", f"/projects/{proj}/tasks", {
-    "title": "#317 — Profession rebalance",
-    "description": "Markdown body."
+    "title": "Profession rebalance",
+    "description": "Markdown body — REQUIRED, never empty."
 })
 tid = t['id']
+
+# Step 2: POST the full task back with the `#<id>` prefix + severity emoji injected.
+t['title'] = f"🟡 #{tid} — {t['title']}"
+t['priority'] = 3
+http("POST", f"/tasks/{tid}", t)
+
 # Place in a bucket (per-view assignment):
 http("POST", f"/projects/{proj}/views/{view}/buckets/{backlog}/tasks",
      {"task_id": tid, "project_view_id": view, "bucket_id": backlog})
+
 # Apply labels:
 for lid in [12, 7, 3]:
     http("PUT", f"/tasks/{tid}/labels", {"label_id": lid})
@@ -120,15 +150,26 @@ http("POST", f"/tasks/{tid}", t)
 
 If `done_bucket_id` is set on the kanban view, the task auto-moves to Shipped.
 
-### Set priority + emoji prefix (bug convention)
+### Re-apply title/priority/emoji to existing tasks (audit + repair sweep)
 
-Bugs get priority 3 + `🔴 ` title prefix. Other priority emojis: 🟡 medium (2), ⚪ low (1).
+When auditing a project, retroactively bring all tasks into compliance — see "Title format + description + severity" above for the rules:
 
 ```python
-t = http("GET", f"/tasks/{tid}")
-t['priority'] = 3
-t['title'] = '🔴 ' + t['title']
-http("POST", f"/tasks/{tid}", t)
+def fix_task(tid, prio, emoji, desc_if_missing=None):
+    t = http("GET", f"/tasks/{tid}")
+    raw = t['title']
+    # Strip redundant prefixes the emoji+label already convey.
+    for p in ("BUG:", "bug:", "Bug:", "TODO:", "todo:"):
+        if raw.startswith(p): raw = raw[len(p):].strip()
+    # Don't double-prefix.
+    already = raw.startswith(f"#{tid} —") or any(raw.startswith(f"{e} #{tid} —") for e in "🔴🟡⚪")
+    if not already:
+        raw = f"{emoji} #{tid} — {raw}".lstrip() if emoji else f"#{tid} — {raw}"
+    t['title'] = raw
+    t['priority'] = prio
+    if desc_if_missing and not (t.get('description') or '').strip():
+        t['description'] = desc_if_missing
+    http("POST", f"/tasks/{tid}", t)
 ```
 
 ### Parent / child relations
@@ -197,9 +238,9 @@ Hundreds of shipped tickets in a backlog is a UX disaster. Keep only **active wo
 - Open PR → mark task **In Progress** (move to bucket 2 / "Doing")
 - Merge PR → mark task **Shipped** (`done: true` triggers auto-move if `done_bucket_id` set)
 
-### Bug tickets
+### Bug + severity discipline
 
-`bug` label → priority 3 + `🔴 ` title prefix at create-time. Apply retroactively if you find an unflagged bug.
+See the "Title format + description + severity" section near the top — bugs get the `bug` label + 🔴 emoji + priority 3 at create-time. Higher-severity vulns / outages get priority 4-5 (still 🔴). Apply retroactively if you find a violator: missing `#<id>`, missing emoji, missing description, wrong priority.
 
 ### Slice clusters get parent/child wiring
 
