@@ -53,6 +53,35 @@ The `/chezmoi-sync` slash command is a manual fallback — I shouldn't normally 
 
 Follow the `writing-fleet-hooks` skill: scripts at `~/.claude/hooks/`, chezmoi-track as `dot_claude/hooks/executable_<name>.sh`, register in `dot_claude/settings.json.tmpl` with `{{ if eq .chezmoi.hostname "host" }}` blocks for host-specific hooks.
 
+### Scaffolding new projects — query current versions, never write from memory
+
+When scaffolding any new project — `package.json`, `Dockerfile FROM`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`, `go.mod`, GitHub Actions versions, anything with a pinned dependency — **query the current version before writing the pin**. Never write a version from memory.
+
+Methods:
+- npm: `npm view <pkg> version` (or `dist-tags`)
+- Docker: `docker manifest inspect <image>:<tag>` for the digest, then `FROM image:tag@sha256:<digest>`
+- Python: `pip index versions <pkg>` or PyPI lookup
+- Rust: `cargo search <crate>` or crates.io
+- GitHub Actions: pin to commit SHA, not tag (`uses: actions/checkout@<sha> # v4.x`)
+- Prefer scaffolding tools (`npx create-*`, `cargo new`, `npx sv create`, etc.) — they query registries at scaffold time. Hand-written manifests are where staleness creeps in.
+
+Why: versions in training data are months-to-years stale by inference time. Picking from memory has caused real downstream security audit findings on this fleet (jail.ericbond.net, vitest 2 pin in 2026 when 4 was current — F-036/37/38). It is not a one-off; it is a pattern that needs an explicit guard.
+
+After scaffolding, do a "current vs pinned" diff across **every** dep to catch hand-written entries the tool didn't generate. If multiple manifests in the same repo share runtime concerns (e.g. two `package.json` files for two containers that mount the same DB), they MUST agree on shared deps' major version. A version split across manifests in one repo is a real bug, not hygiene.
+
+### Type errors are bugs — never ignore static-analysis output
+
+If a project has a typecheck command (`npm run typecheck`, `tsc --noEmit`, `mypy`, `cargo check`, `go vet`, `pyright`, `ruff check`, etc.), **run it on every change and treat any error as a failing test**. Type errors are bugs; do not commit code that breaks them.
+
+Specific rules:
+- If `package.json` (or equivalent) has a `typecheck` / `lint` / `check` script, it MUST pass on main. If it's broken when you arrive, fix it or flag it before adding more code on top.
+- `npm test` not running typecheck is a CI gap, not permission to ignore types. Run typecheck **separately** as part of every "is this ready to commit?" check.
+- Never add `// @ts-ignore`, `// @ts-expect-error`, `# type: ignore`, `as any`, `as unknown as X`, or equivalent bypasses without an explicit justification comment. "I'll fix it later" is not justification — open an issue and link it.
+- A pre-existing broken typecheck doesn't justify extending the breakage. If you find typecheck broken, fix it or surface it before you add code that would also fail.
+- Same rule for lint, format checks, and any other static analysis the project ships. If a check exists, it must run.
+
+Why: on jail.ericbond.net, `npm run typecheck` was silently broken for an unknown duration because `npm test` didn't include it and nothing else gated on it. Multiple real type errors had been latent in the test suite and `web/src/lib/auth.server.ts`. Caught by accident during a TypeScript major bump in 2026-05-07. A static check that exists but isn't run is worse than no check — it gives false confidence.
+
 ## Fleet sync architecture
 
 The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
