@@ -172,6 +172,38 @@ def fix_task(tid, prio, emoji, desc_if_missing=None):
     http("POST", f"/tasks/{tid}", t)
 ```
 
+### Find tasks that need title-format repair
+
+Pair with `fix_task` above — that function repairs a known tid; this sweep discovers which tids need it. Run after every "sync with Vikunja" / new-project bootstrap.
+
+```python
+import re
+TITLE_OK = re.compile(r"^[🔴🟡⚪]?\s?#\d+\s—\s")  # emoji optional, #<tid> + em-dash required
+for tid, title, done in [(t['id'], t['title'], t['done']) for _, t in tasks]:
+    if done: continue
+    if not TITLE_OK.match(title):
+        print(f"format-violator: #{tid} {title[:80]}")
+```
+
+Feed each violator id into `fix_task(tid, prio, emoji, desc_if_missing)`. Pick `prio`/`emoji` from the severity tier table — for raw quick-capture entries Dave dropped in, default to ⚪/1 unless context says otherwise.
+
+### Find stale shipped tickets (open in Vikunja, already merged on master)
+
+Cross-reference open tickets against shipped commit messages. The deliverable shipped but the ticket never got marked done.
+
+```python
+import subprocess, re
+log = subprocess.check_output(['git', 'log', 'master', '--oneline'], cwd=repo_path).decode()
+shipped = set(re.findall(r"#(\d+[a-z]?)", log))
+for proj, t in tasks:
+    if t['done']: continue
+    m = re.search(r"#(\d+[a-z]?)", t['title'])
+    if m and m.group(1) in shipped:
+        print(f"likely-stale: #{t['id']} matches commit #{m.group(1)} — {t['title'][:80]}")
+```
+
+**Verify before closing.** A `#306 phase 1` shipping doesn't mean `#306 phase 3` shipped — read the actual commit messages for phase qualifiers, slice letters, and partial-implementation notes. Mark done only when the ticket's stated deliverable is genuinely merged.
+
 ### Parent / child relations
 
 For sliced clusters (e.g. parent #287 → children #287a/b/c/d), use the `subtask` relation. Vikunja v2.3 auto-mirrors: creating `subtask` from parent's side auto-creates `parenttask` from the child's side.
