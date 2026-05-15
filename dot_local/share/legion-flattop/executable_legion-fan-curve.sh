@@ -31,17 +31,25 @@
 #
 # Sequence is load-bearing: at boot ideapad_acpi binds VPC2004:00 before us,
 # so we unload it, modprobe legion-laptop, then reload ideapad (which then
-# fails-bind harmlessly).
+# fails-bind harmlessly). Newer legion-laptop versions register their own
+# platform device named "legion" instead of binding to VPC2004:00, so the
+# control attributes (fan_fullspeed, powermode, etc.) appear under
+# /sys/devices/platform/legion/. Probe both paths.
 
 set -euo pipefail
-
-VPC=/sys/bus/platform/devices/VPC2004:00
 
 modprobe -r ideapad_laptop 2>/dev/null || true
 modprobe legion-laptop
 
-if [[ ! -e "$VPC/fan_fullspeed" ]]; then
-    echo "legion-fan-curve: legion-laptop did not bind to VPC2004:00" >&2
+VPC=
+for candidate in /sys/devices/platform/legion /sys/bus/platform/devices/VPC2004:00; do
+    if [[ -e "$candidate/fan_fullspeed" ]]; then
+        VPC="$candidate"
+        break
+    fi
+done
+if [[ -z "$VPC" ]]; then
+    echo "legion-fan-curve: legion-laptop did not expose fan_fullspeed at any known path" >&2
     exit 1
 fi
 
