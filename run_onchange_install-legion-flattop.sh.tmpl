@@ -18,9 +18,11 @@
 # Source file checksums:
 # legion-flattop-patches.sh: {{ include "dot_local/share/legion-flattop/executable_legion-flattop-patches.sh" | sha256sum }}
 # legion-fan-curve.sh: {{ include "dot_local/share/legion-flattop/executable_legion-fan-curve.sh" | sha256sum }}
+# legion-fan-curve-alert.sh: {{ include "dot_local/share/legion-flattop/executable_legion-fan-curve-alert.sh" | sha256sum }}
 # zz-legion-flattop-patches.hook: {{ include "dot_local/share/legion-flattop/zz-legion-flattop-patches.hook" | sha256sum }}
 # legion-laptop.conf: {{ include "dot_local/share/legion-flattop/legion-laptop.conf" | sha256sum }}
 # legion-fan-curve.service: {{ include "dot_local/share/legion-flattop/legion-fan-curve.service" | sha256sum }}
+# legion-fan-curve-alert.service: {{ include "dot_local/share/legion-flattop/legion-fan-curve-alert.service" | sha256sum }}
 # legion-flattop-resume: {{ include "dot_local/share/legion-flattop/executable_legion-flattop-resume" | sha256sum }}
 
 set -euo pipefail
@@ -37,12 +39,14 @@ sudo rm -rf /opt/services/legion-laptop
 
 # Install to /opt/services/legion-flattop/ per fleet convention.
 sudo install -d -m 0755 /opt/services/legion-flattop/bin
-sudo install -m 0755 "$SRC/legion-flattop-patches.sh"  /opt/services/legion-flattop/bin/legion-flattop-patches.sh
-sudo install -m 0755 "$SRC/legion-fan-curve.sh"        /opt/services/legion-flattop/bin/legion-fan-curve.sh
-sudo install -m 0644 "$SRC/zz-legion-flattop-patches.hook" /etc/pacman.d/hooks/zz-legion-flattop-patches.hook
-sudo install -m 0644 "$SRC/legion-laptop.conf"         /etc/modprobe.d/legion-laptop.conf
-sudo install -m 0644 "$SRC/legion-fan-curve.service"   /etc/systemd/system/legion-fan-curve.service
-sudo install -m 0755 "$SRC/legion-flattop-resume"      /usr/lib/systemd/system-sleep/legion-flattop
+sudo install -m 0755 "$SRC/legion-flattop-patches.sh"   /opt/services/legion-flattop/bin/legion-flattop-patches.sh
+sudo install -m 0755 "$SRC/legion-fan-curve.sh"         /opt/services/legion-flattop/bin/legion-fan-curve.sh
+sudo install -m 0755 "$SRC/legion-fan-curve-alert.sh"   /opt/services/legion-flattop/bin/legion-fan-curve-alert.sh
+sudo install -m 0644 "$SRC/zz-legion-flattop-patches.hook"  /etc/pacman.d/hooks/zz-legion-flattop-patches.hook
+sudo install -m 0644 "$SRC/legion-laptop.conf"          /etc/modprobe.d/legion-laptop.conf
+sudo install -m 0644 "$SRC/legion-fan-curve.service"        /etc/systemd/system/legion-fan-curve.service
+sudo install -m 0644 "$SRC/legion-fan-curve-alert.service"  /etc/systemd/system/legion-fan-curve-alert.service
+sudo install -m 0755 "$SRC/legion-flattop-resume"       /usr/lib/systemd/system-sleep/legion-flattop
 
 sudo systemctl daemon-reload
 sudo systemctl enable legion-fan-curve.service

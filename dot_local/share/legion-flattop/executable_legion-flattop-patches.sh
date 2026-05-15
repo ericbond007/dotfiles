@@ -84,6 +84,33 @@ for src in "${sources[@]}"; do
     apply_patch3 "$src"
 done
 
+# Sanity check — verify legion-fan-curve.sh's sysfs probe paths are still
+# discoverable in the upstream source. The script probes:
+#   /sys/devices/platform/legion/       ← unconditional platform_device_register_simple("legion", ...)
+#   /sys/bus/platform/devices/VPC2004:00/   ← ACPI alias bind (after our patch1)
+# If neither registration pattern appears, upstream has restructured how the
+# driver exposes its sysfs root and legion-fan-curve.service will silently
+# break on next boot. Warn loudly here so it gets caught at upgrade time.
+for src in "${sources[@]}"; do
+    legion_dev=0; vpc_alias=0
+    grep -qF 'platform_device_register_simple("legion"' "$src" && legion_dev=1
+    grep -qF '{ "VPC2004", 0 }' "$src" && vpc_alias=1
+    if (( legion_dev == 0 && vpc_alias == 0 )); then
+        cat >&2 <<EOF
+legion-flattop-patches: WARNING — neither known platform-device pattern in
+  $src.
+  Expected at least ONE of:
+    platform_device_register_simple("legion", ...)   [stable upstream registration]
+    { "VPC2004", 0 }                                  [acpi_device_id alias entry]
+  legion-fan-curve.service probes /sys/devices/platform/legion/ and
+  /sys/bus/platform/devices/VPC2004:00/. With neither pattern in the
+  source, both probes will fail on next boot. Inspect the new source and
+  add the new path to the probe list in
+  /opt/services/legion-flattop/bin/legion-fan-curve.sh BEFORE rebooting.
+EOF
+    fi
+done
+
 if (( patched_any == 0 )); then
     echo "legion-flattop-patches: nothing to do, all patches present"
     exit 0

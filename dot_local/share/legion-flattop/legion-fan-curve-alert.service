@@ -1,0 +1,7 @@
+[Unit]
+Description=Alert on legion-fan-curve.service failure
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/opt/services/legion-flattop/bin/legion-fan-curve-alert.sh

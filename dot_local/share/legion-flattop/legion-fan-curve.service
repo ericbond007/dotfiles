@@ -5,6 +5,8 @@ After=systemd-udev-settle.service
 Wants=systemd-udev-settle.service
 ConditionVirtualization=!container
 
+OnFailure=legion-fan-curve-alert.service
+
 [Service]
 Type=oneshot
 RemainAfterExit=yes
