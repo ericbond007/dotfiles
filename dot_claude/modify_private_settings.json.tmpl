@@ -1,0 +1,93 @@
+#!/bin/sh
+# chezmoi modify_ script for ~/.claude/settings.json
+#
+# settings.json is CO-MANAGED: chezmoi must enforce the fleet-critical
+# `permissions` + `hooks` (incl. per-host hook blocks), but Claude Code
+# rewrites `enabledPlugins`, `effortLevel`, `editorMode`,
+# `remoteControlAtStartup`, `agentPushNotifEnabled`, `mcpServers`, ... at
+# runtime per host. A full-file template fights those runtime writes and
+# makes `chezmoi update` abort (drift prompt, no TTY over ssh) — which had
+# silently frozen wanda out of all dotfile syncs.
+#
+# Contract: chezmoi pipes the current target file on stdin (empty if
+# absent); our stdout becomes the new file. We:
+#   - seed the runtime keys from template defaults (fresh host only),
+#   - preserve whatever Claude Code wrote for them on existing hosts,
+#   - force `.permissions` and `.hooks` from the chezmoi-managed (templated,
+#     hostname-conditional) values every run.
+# Per-host runtime permission grants belong in settings.local.json (not
+# chezmoi-tracked) per CLAUDE.md, so force-replacing .permissions is correct.
+#
+# jq is a documented fleet dependency (onboarding step 1); fail loudly if absent.
+set -eu
+
+command -v jq >/dev/null 2>&1 || { echo "modify_settings.json: jq not found" >&2; exit 1; }
+
+MANAGED='{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(pacman *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(systemctl *)",
+      "Bash(uname *)",
+      "Bash(zramctl *)",
+      "Bash(findmnt *)",
+      "Bash(pactl *)",
+      "Bash(echo *)",
+      "Bash(tuned-adm *)",
+      "Bash(grep *)"
+    ]
+  },
+  "hooks": {
+    "Notification": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "~/.claude/hooks/notify-tmux.sh" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-validate.sh" } ] },
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/pre-commit-secrets-scan.sh" } ] }{{ end }}
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-readd.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" } ] },
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/wiki-update-reminder.sh" } ] }{{ end }}
+    ]
+  }
+}'
+
+SEED='{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "playwright@claude-plugins-official": {{ if eq .chezmoi.hostname "flattop" }}false{{ else }}true{{ end }},
+    "skill-creator@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "high",
+  "editorMode": "vim",
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true{{ if eq .chezmoi.hostname "flattop" }},
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--browser", "chromium", "--executable-path", "/usr/bin/chromium"]
+    }
+  }{{ end }}
+}'
+
+cur="$(cat)"
+[ -n "$cur" ] || cur='{}'
+
+printf '%s' "$cur" | jq -S \
+  --argjson managed "$MANAGED" \
+  --argjson seed "$SEED" \
+  '($seed * .) | .permissions = $managed.permissions | .hooks = $managed.hooks'
