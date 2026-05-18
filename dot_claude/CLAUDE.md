@@ -13,7 +13,7 @@ Applies on every machine in the ericbond fleet (flattop, wanda, serp). Machine-s
 
 - **flattop** — primary workstation; CachyOS/Wayland/KDE; kitty + tmux. This is typically where I'm running.
 - **wanda** (10.0.0.x) — Arch server. Hosts Home Assistant, docker services, firewall (nftables), own UPS. Has machine-specific Claude hooks (firewall/service-owned-files/wiki/secrets) registered via the hostname-conditional block in `dot_claude/settings.json.tmpl`.
-- **serp / serpentii** (10.0.0.9) — Arch server. GTX 980 Ti, UPS CyberPower CP1500 on USB, NUT netserver on 10.0.0.9:3493. Kernel pinned to 6.18.2 (nvidia-580xx AUR incompatible with ≥6.19) — do NOT upgrade `linux`/`linux-headers` without confirming the AUR patch. Bootloader: syslinux on BIOS/GPT, root=sda2 ext4. DM=SDDM. `/usr/bin/fish` must remain in `/etc/shells`.
+- **serp / serpentii** (10.0.0.9) — Arch server. GTX 980 Ti, UPS CyberPower CP1500 on USB, NUT netserver on 10.0.0.9:3493. Runs kernel **6.19.x** with the nvidia-580xx AUR module working — the earlier "pinned to 6.18.2 / incompatible with ≥6.19" claim is **lifted** (verified 2026-05-15; see `/opt/services/wiki/docs/reference/incidents.md` → 2026-05-15 serp OOM post-mortem). Still: after any major `linux`/`linux-headers` jump, rebuild and confirm the nvidia-580xx AUR module **before** rebooting (out-of-tree module; a failed build wedges the DRM path). Bootloader: syslinux on BIOS/GPT, root=sda2 ext4. DM=SDDM. `/usr/bin/fish` must remain in `/etc/shells`.
 
 Network: `10.0.0.0/24` domain `ericbond.net`. Live host scanner at `https://scan.ericbond.net`.
 
