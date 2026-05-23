@@ -7,16 +7,16 @@ description: Use when working on the hoosierTrail (Oregon Trail Revisited) game'
 
 The game uses a hybrid SVG-plus-raster art pipeline. SVG handles the layout, color tinting, and per-instance variants; rasters come from Blender (3D models → animated sprite cycles) and SDXL+LoRA (painted landscape backdrops). The SVG composes them at fixed pixel coordinates.
 
-This skill is the index to "how we make a frame." Specific working scripts live in the repo at `/home/eric/projects/hoosierTrail-wagon-bg/tools/`; the dialed-in flags live in `tools/blender/render-yoke-set.sh`.
+This skill is the index to "how we make a frame." Specific working scripts live in the repo at `/home/eric/projects/hoosierTrail/tools/`; the dialed-in flags live in `tools/blender/render-yoke-set.sh`.
 
 ## Project layout
 
 ```
-/home/eric/projects/hoosierTrail/              ← primary jj-tracked repo
-/home/eric/projects/hoosierTrail-wagon-bg/     ← sibling git worktree, holds tools/wagon-bg/lora-train (~2.5GB)
+/home/eric/projects/hoosierTrail/              ← the repo (jj-colocated)
+~/datasets/ot-revisited/lora-train/            ← LoRA training data (~2.5GB), kept outside the repo
 ```
 
-Both paths share the same `.jj/` store. Don't `git push` directly — use `jj git push --bookmark <name>` (see in-repo `CLAUDE.md`).
+The `hoosierTrail-wagon-bg/` sibling worktree was retired 2026-05-23 (it had been a pre-jj-adoption convenience; consolidation surfaced fewer stale-fork-point merge surprises). Don't `git push` directly — use `jj git push --bookmark <name>` (see in-repo `CLAUDE.md`).
 
 | Path | Role |
 |---|---|
@@ -184,7 +184,7 @@ The painted-style landscape backdrops come from SDXL + a custom LoRA `ht_landsca
   - `v2_2000` (current production) — current preferred; `generate.py` auto-loads this
   - **`storm-mood` retrain — DEFERRED.** Forces storms to ~95% sky which dominates the composition; the natural-looking storm look was lost. Curated retrain needed.
 
-- **Training data:** `tools/wagon-bg/lora-train/` (~2.5GB) lives in the sibling worktree at `hoosierTrail-wagon-bg`, NOT the primary repo.
+- **Training data:** `~/datasets/ot-revisited/lora-train/` (~2.5 GB). Kept outside the repo (curated data, not source — moved out 2026-05-23 when the wagon-bg sibling worktree was retired).
 
 - **Prompt convention:** use "horizon-vista" phrasing for the single-backdrop variants per biome (no time-of-day mixed in — weather drives variant selection, time-of-day comes from a separate scene tint layer).
 
@@ -211,7 +211,7 @@ Dave's rule: **show generated images in a running dev server, not via inline rea
 3. Add a `<details>`-collapsed strip section per new variant. Cycling animation via `class="cycle" data-base="..."` (the gallery has a `setInterval(167)` driver for 6 fps).
 
 ```bash
-python3 /tmp/nocache_server.py /home/eric/projects/hoosierTrail-wagon-bg/static/wagon-bg/ 8768
+python3 /tmp/nocache_server.py /home/eric/projects/hoosierTrail/static/wagon-bg/ 8768
 ```
 
 For non-gallery one-offs (cowboy-views, oxteam-view, wagon-train-views) the convention is `/tmp/<view-name>/` with its own `index.html` + nocache_server on a sequential port.
