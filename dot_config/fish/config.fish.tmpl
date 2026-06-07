@@ -17,3 +17,13 @@ end
 #function fish_greeting
 #    # smth smth
 #end
+
+# !! — rerun the previous command
+function fuking_do_it
+    echo $history[1]
+end
+abbr -a !! --function fuking_do_it
+{{ if eq .chezmoi.hostname "serpentii" }}
+# OpenClaw Completion
+test -f "/home/eric/.openclaw/completions/openclaw.fish"; and source "/home/eric/.openclaw/completions/openclaw.fish"
+{{ end }}

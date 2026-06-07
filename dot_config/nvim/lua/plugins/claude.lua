@@ -4,6 +4,9 @@ return {
     diff_opts = {
       layout = "horizontal",
     },
+    terminal = {
+      split_width_percentage = 0.5,
+    },
   },
   keys = {
     { "<leader>a", "", desc = "+ai", mode = { "n", "v" } },
