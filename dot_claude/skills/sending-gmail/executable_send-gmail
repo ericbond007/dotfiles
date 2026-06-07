@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""send-gmail — send a plain-text email as Dave's Gmail (ericbond007@gmail.com).
+
+For use by Claude Code / HAL across the fleet. Credentials are fetched at runtime
+from 1Password (item `gmail-smtp`, vault.ericbond.net) via `op read`; the password
+stays in-process and is NEVER passed on the command line. Recipients may be
+aliases from ~/.config/hal/contacts.json or raw email addresses.
+
+Usage:
+  send-gmail --to mom --subject "Hi" --body "Running late, love you"
+  echo "long body" | send-gmail --to her@example.com --subject "Notes"
+  send-gmail --to mom --subject "t" --body "b" --dry-run
+"""
+import argparse
+import json
+import os
+import re
+import smtplib
+import ssl
+import subprocess
+import sys
+from email.message import EmailMessage
+from pathlib import Path
+
+CONTACTS = Path(os.path.expanduser("~/.config/hal/contacts.json"))
+ITEM = "op://vault.ericbond.net/gmail-smtp"
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def op_read(field):
+    try:
+        r = subprocess.run(["op", "read", f"{ITEM}/{field}"],
+                           capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        sys.exit("error: `op` (1Password CLI) not found on PATH")
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"error: op read {field} failed: {e.stderr.strip()[:200]}")
+    return "".join(r.stdout.split())  # strip any spaces/newline (app pw is shown spaced)
+
+
+def load_contacts():
+    try:
+        data = json.loads(CONTACTS.read_text())
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as e:
+        sys.exit(f"error: {CONTACTS} is invalid JSON: {e}")
+    return {k.strip().lower(): v for k, v in data.items()}
+
+
+def resolve(recipient, contacts):
+    if EMAIL_RE.match(recipient):
+        return recipient
+    key = recipient.strip().lower()
+    if key in contacts:
+        return contacts[key]
+    known = ", ".join(sorted(contacts)) or "(none)"
+    sys.exit(f"error: '{recipient}' is not a known contact and not a valid email. "
+             f"Known aliases: {known}")
+
+
+def main():
+    p = argparse.ArgumentParser(description="Send a plain-text email as Dave's Gmail.")
+    p.add_argument("--to", required=True, help="recipient alias or email address")
+    p.add_argument("--subject", required=True)
+    p.add_argument("--body", help="body text; if omitted, read from stdin")
+    p.add_argument("--dry-run", action="store_true", help="print resolved message; do not send")
+    a = p.parse_args()
+
+    contacts = load_contacts()
+    to_addr = resolve(a.to, contacts)
+    body = a.body if a.body is not None else sys.stdin.read()
+
+    msg = EmailMessage()
+    msg["To"] = to_addr
+    msg["Subject"] = a.subject
+    msg.set_content(body)
+
+    if a.dry_run:
+        print("[dry-run] would send:\n"
+              "From: ericbond007@gmail.com (fetched from 1Password at send time)\n"
+              f"To: {to_addr}\nSubject: {a.subject}\n\n{body}")
+        return
+
+    user = op_read("username")
+    pw = op_read("password")
+    msg["From"] = user
+
+    ctx = ssl.create_default_context()
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as s:
+            s.starttls(context=ctx)
+            s.login(user, pw)
+            s.send_message(msg)
+    except smtplib.SMTPAuthenticationError:
+        sys.exit("error: SMTP auth failed — gmail-smtp credential may be wrong/revoked")
+    except (smtplib.SMTPException, OSError) as e:
+        sys.exit(f"error: send failed: {e}")
+
+    print(f"Sent to {to_addr}")
+
+
+if __name__ == "__main__":
+    main()
