@@ -172,6 +172,48 @@ def fix_task(tid, prio, emoji, desc_if_missing=None):
     http("POST", f"/tasks/{tid}", t)
 ```
 
+### Looking up a specific ticket — and why `?s=` will lie to you
+
+**When you have a ticket ID** (`#1040`, `#287`, etc.), ALWAYS look it up by direct GET:
+
+```python
+t = http("GET", f"/tasks/{tid}")
+```
+
+This works for both open AND shipped tickets, and is the only reliable way to confirm a ticket exists. Do not assume "ticket X doesn't exist" from anything except a 404 on this endpoint.
+
+**The `?s=<query>` fuzzy search is unreliable for ID lookups.** Even searching for the ID digits in title text can silently miss the ticket — the matching is loose and ranks results by an opaque score, so a ticket whose title is literally `🟢 #1040 — Historical mileage pass` may NOT appear when you query `?s=mile sequencing` or `?s=mileage`. Burned by this 2026-05-26: an agent reported `#1040 NOT FOUND` when it was a real shipped ticket — a follow-up was filed unnecessarily.
+
+**Lookup decision tree:**
+
+| You know | Use |
+|---|---|
+| Ticket ID | `GET /tasks/<id>` — definitive |
+| Exact title text | `GET /projects/<p>/tasks?filter=title%20like%20%22<text>%22` |
+| Just a topic/keyword | Walk all pages (see "audit pattern" below); **include `done`** — shipped tickets are valid context |
+| Whether *anything* has shipped on a topic | `?s=<keyword>` can be a quick sanity check, but treat 0 hits as "maybe" not "no" |
+
+**Audit pattern — walk all pages, include done:**
+
+```python
+hits = {}
+for proj in [2, 3, 4]:
+    page = 1
+    while True:
+        chunk = http("GET", f"/projects/{proj}/tasks?per_page=50&page={page}")
+        if not chunk: break
+        for t in chunk:
+            # NOTE: do NOT filter `t['done']` here — done tickets often
+            # contain the very context (shipped work) you need to find
+            haystack = (t['title'] + ' ' + (t.get('description') or '')).lower()
+            if any(kw in haystack for kw in keywords):
+                hits[t['id']] = t
+        if len(chunk) < 50: break
+        page += 1
+```
+
+The done-skip in the stale-ticket recipe below is a deliberate exception for that one workflow (closing tickets that already shipped). Everywhere else, done tickets are part of the project's institutional memory — include them.
+
 ### Find tasks that need title-format repair
 
 Pair with `fix_task` above — that function repairs a known tid; this sweep discovers which tids need it. Run after every "sync with Vikunja" / new-project bootstrap.
