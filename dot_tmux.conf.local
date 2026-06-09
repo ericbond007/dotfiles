@@ -418,6 +418,16 @@ set -g automatic-rename-format '#h:#{pane_current_command}'
 # display a message after toggling mouse support
 bind m run "cut -c3- '#{TMUX_CONF}' | sh -s _toggle_mouse" \; display 'mouse #{?#{mouse},on,off}'
 
+# -- survive OOM-killed pane commands ------------------------------------------
+# Claude Code sets oom_score_adj=200 on its procs, so the kernel kills *it* first
+# under memory pressure (2026-06-08 OOM post-mortem: a 1M-context claude ballooned
+# to 8.7GB and was global-OOM-killed, taking its window with it). 'failed' keeps a
+# pane open only when its command dies abnormally (e.g. SIGKILL); normal exits
+# still close cleanly. prefix+R respawns the dead pane in place.
+set -g remain-on-exit failed
+set -g remain-on-exit-format '#[fg=#990000,bg=default] ✖ pane died (#{pane_dead_status}) — prefix+R to respawn #[default]'
+bind R respawn-pane -k
+
 # move status line to top
 #set -g status-position top
 
