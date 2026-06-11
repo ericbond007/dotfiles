@@ -5,6 +5,9 @@
 .tmux/**
 .claude/hooks/*.log
 
+# per-host permission overrides — never share across the fleet
+.claude/settings.local.json
+
 # nvim's lazy.nvim regenerates this with per-host commit pins on every plugin
 # update — let each host own its copy.
 .config/nvim/lazy-lock.json
