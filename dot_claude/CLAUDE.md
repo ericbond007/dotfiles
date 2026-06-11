@@ -82,6 +82,20 @@ Specific rules:
 
 Why: on jail.ericbond.net, `npm run typecheck` was silently broken for an unknown duration because `npm test` didn't include it and nothing else gated on it. Multiple real type errors had been latent in the test suite and `web/src/lib/auth.server.ts`. Caught by accident during a TypeScript major bump in 2026-05-07. A static check that exists but isn't run is worse than no check — it gives false confidence.
 
+### CI gates are HARD — red means STOP, never merge (Dave's order, 2026-06-11)
+
+**If CI fails — build, typecheck, lint, tests, anything — the merge does not happen. Full stop. Stop and solve it.** No exceptions, no "it's probably infra," no "the deploy gate passed anyway," no merging-then-fixing-forward. This applies to every repo on every machine in the fleet.
+
+Mechanics that make it stick:
+
+- **Never sequence `gh pr merge` (or any merge) unconditionally after a checks-watch** in a command chain. The merge must be mechanically conditional on the verified GREEN outcome (check the watch's exit status / parse its conclusion), or run as a separate step after reading the checks yourself. A chain that merges regardless of the watch's verdict is the bug that caused this rule.
+- **Run the FULL CI gate set locally before opening a PR** — every command CI runs, not just the convenient ones. If CI runs a gate the local set doesn't (`tsc -p` on a secondary tsconfig, a lint over an extra dir), add it to the local set the moment you discover it.
+- **If a red check looks like flaky infra, prove it**: re-run the check and watch it go green BEFORE merging. "Looked transient" is not green.
+- **Verify the working set before branching/bookmarking** — with jj especially, the working copy snapshot carries stray files into the PR. `jj diff --summary` must list exactly the intended files.
+- A red main/master is a drop-everything event: fixing it outranks all feature work.
+
+Origin: 2026-06-11, jailBird PR #87 — a stray script rode a jj snapshot into a PR, failed a CI gate the local set didn't replicate, and a blind command chain merged anyway. Master went red. Dave's verdict: "CI gates should be hard. If the build fails, we do not merge. Stop and solve it."
+
 ## Fleet sync architecture
 
 The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
