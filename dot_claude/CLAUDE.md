@@ -15,7 +15,7 @@ Applies on every machine in the ericbond fleet (flattop, wanda, serp). Machine-s
 - **wanda** (10.0.0.x) — Arch server. Hosts Home Assistant, docker services, firewall (nftables), own UPS. Has machine-specific Claude hooks (firewall/service-owned-files/wiki/secrets) registered via the hostname-conditional block in `dot_claude/settings.json.tmpl`.
 - **serp / serpentii** (10.0.0.9) — Arch server. GTX 980 Ti, UPS CyberPower CP1500 on USB, NUT netserver on 10.0.0.9:3493. Runs kernel **6.19.x** with the nvidia-580xx AUR module working — the earlier "pinned to 6.18.2 / incompatible with ≥6.19" claim is **lifted** (verified 2026-05-15; see `/opt/services/wiki/docs/reference/incidents.md` → 2026-05-15 serp OOM post-mortem). Still: after any major `linux`/`linux-headers` jump, rebuild and confirm the nvidia-580xx AUR module **before** rebooting (out-of-tree module; a failed build wedges the DRM path). Bootloader: syslinux on BIOS/GPT, root=sda2 ext4. DM=SDDM. `/usr/bin/fish` must remain in `/etc/shells`.
 
-Network: `10.0.0.0/24` domain `ericbond.net`. Live host scanner at `https://scan.ericbond.net`.
+Network: `10.0.0.0/24` domain `ericbond.net`. Live host scanner at `https://scan.ericbond.net`. **Router SSH login is `admin`** — not `root`, not `eric`; don't burn turns on key permutations.
 
 ### Conventions on wanda/serp
 
@@ -32,6 +32,18 @@ Execute shell commands via the Bash tool rather than asking the user to run them
 ### Least privilege on wanda/serp
 
 Use sudo only when required. Prefer 1Password CLI (`op read ...`) over hardcoded secrets anywhere. Before dangerous edits (`/etc/*`, systemd units, nftables, pam), back up the file and diff the change with the user before applying.
+
+### Blast radius before process kills and load tests
+
+Never kill processes by name (`pkill`/`killall`) or launch load/stress tests without first inspecting what's running and confirming nothing live is collateral — past failures: a 16-core stress test under Dave's running game (94°C), a broad Firefox kill that nearly hit an active Playwright session. The `blast-radius.sh` PreToolUse hook enforces this fleet-wide: it blocks kill/stress-class commands once and shows the live process table; after genuinely reviewing the list, re-run with the `env BLAST_OK=1` prefix. Don't reflexively prefix to bypass — the review is the point. If anything listed could be Dave's active work, stop and ask.
+
+### Verify the remote shell before sending shell-specific syntax
+
+The fleet runs fish, but remote and non-fleet hosts (routers, Steam Deck, appliances) vary — fish syntax in zsh/bash (or vice versa) can silently no-op, which is worse than erroring. Before piping commands over ssh to an unfamiliar host, check its shell (`echo $SHELL` or `ps -p $$`) and write for that dialect.
+
+### Prefer the package manager over hand-patching
+
+On Arch hosts, fix package/version problems via `yay`/`pacman` (or the AUR) rather than manual builds, hand-patched version pins, or vendored copies. Dave has rejected hand-patched SDK pins in favor of clean `yay` installs more than once — package-manager state is inspectable and upgradeable; hand patches rot silently.
 
 ### Chezmoi workflow (flattop primarily)
 
