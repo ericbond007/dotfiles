@@ -1,6 +1,6 @@
 ---
 name: using-vikunja
-description: Use when interacting with the user's Vikunja project tracker at projects.ericbond.net — listing tasks, creating/updating tasks, marking done, applying labels, setting parent/child relations, bootstrapping a new project, or auditing for stale tickets. Vikunja is the de-facto project-management tool across all of Dave's projects; treat it as the source of truth for what's open vs shipped.
+description: Use when Dave mentions "vk", "vikunja", "ticket(s)", "the tracker", or projects.ericbond.net in ANY phrasing — including quick ad-hoc asks ("check that vk thing", "close the ticket", "file a ticket for that") — or when doing any Vikunja work; listing tasks, creating/updating tasks, marking done, applying labels, setting parent/child relations, bootstrapping a new project, or auditing for stale tickets. Vikunja is the de-facto project-management tool across all of Dave's projects; treat it as the source of truth for what's open vs shipped.
 ---
 
 # Using Vikunja
