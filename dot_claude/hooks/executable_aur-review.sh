@@ -33,10 +33,12 @@ printf '%s' "$cmd" | grep -qE '\b(yay|paru|makepkg)\b' || exit 0
 
 # Match yay/paru/makepkg only in COMMAND POSITION — start of a command, not as a
 # word inside a string, comment, or path argument. Command position = start of
-# line, or right after a separator (; & | or a subshell `(`), optionally via
-# `sudo `. This avoids false positives like `echo "=== paru config ==="` or
-# `cat ~/.config/paru/paru.conf`, while still catching `foo && yay -S bar`.
-PFX='(^|[;&|(])[[:space:]]*(sudo[[:space:]]+)?'
+# line, or right after a separator: ; & | or a `$(` command-substitution,
+# optionally via `sudo `. A BARE `(` is deliberately NOT a separator — it shows
+# up in prose like `echo "none (yay config inert)"` and would false-trip. This
+# still catches `foo && yay -S bar`, `yes | yay -S foo`, and `$(yay -S x)`,
+# while passing `echo "=== paru config ==="` and `cat ~/.config/paru/paru.conf`.
+PFX='(^|[;&|]|[$][(])[[:space:]]*(sudo[[:space:]]+)?'
 
 # Build/install/upgrade signatures (any one trips the guard):
 #   -Su / -Syu / -Sua ...   any -S cluster containing 'u' (sysupgrade)
