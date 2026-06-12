@@ -37,6 +37,15 @@ Use sudo only when required. Prefer 1Password CLI (`op read ...`) over hardcoded
 
 Never kill processes by name (`pkill`/`killall`) or launch load/stress tests without first inspecting what's running and confirming nothing live is collateral — past failures: a 16-core stress test under Dave's running game (94°C), a broad Firefox kill that nearly hit an active Playwright session. The `blast-radius.sh` PreToolUse hook enforces this fleet-wide: it blocks kill/stress-class commands once and shows the live process table; after genuinely reviewing the list, re-run with the `env BLAST_OK=1` prefix. Don't reflexively prefix to bypass — the review is the point. If anything listed could be Dave's active work, stop and ask.
 
+### Inspect AUR PKGBUILDs before installing
+
+AUR PKGBUILDs run arbitrary maintainer code at **build and install** time. The 2026-06-11 AUR campaign pushed malware through ~500 packages, largely via **updates** — so both fresh installs and routine upgrades are vectors. Always read a PKGBUILD before it runs. Two enforcement layers, one policy:
+
+- **HAL (my installs):** the `aur-review.sh` PreToolUse hook blocks `yay`/`paru` installs+upgrades (`-S <pkg>`, bare `yay`, `-Su`/`-Syu`/`-Sua`) and `makepkg` builds. Read-only ops (`-Ss`/`-Si`/`-Q*`, and `-G`/`--getpkgbuild` itself) pass. To review: `yay -G <pkg>` clones the PKGBUILD + sources without building; Read the `PKGBUILD`, `*.install`, and sources for `curl|sh` pipes, base64/`eval`/obfuscation, off-upstream source URLs, suspicious `prepare()`/`build()`/`package()` or post-install hooks, and names on the infected list. For an upgrade, review the PKGBUILD **diff**. Clean → re-run prefixed with `env AUR_OK=1` (same block-once/override idiom as `BLAST_OK=1`). Anything off → STOP and ask Dave. Don't reflexively prefix to bypass — the read is the point.
+- **Dave (interactive installs):** yay (`~/.config/yay/config.json`: `editmenu`+`diffmenu`) and paru (`~/.config/paru/paru.conf`: review-on by default + `UpgradeMenu`) are configured fleet-wide to surface the PKGBUILD/diff menu on every build, so an updated PKGBUILD can't slide in unseen. The yay/paru configs are chezmoi-tracked under `dot_config/`. A user `paru.conf` **replaces** `/etc/paru.conf` (no merge) — keep its `[options]` in parity with the host's `/etc/paru.conf`.
+
+The `aurvulntest` checker (the 2026-06-11 infected-package list) is the post-hoc audit; this rule is the pre-emptive guard. Out of scope: living-pi (ALARM, not a chezmoi peer) — it gets neither the hook config nor the yay/paru configs via sync.
+
 ### Verify the remote shell before sending shell-specific syntax
 
 The fleet runs fish, but remote and non-fleet hosts (routers, Steam Deck, appliances) vary — fish syntax in zsh/bash (or vice versa) can silently no-op, which is worse than erroring. Before piping commands over ssh to an unfamiliar host, check its shell (`echo $SHELL` or `ps -p $$`) and write for that dialect.
