@@ -119,6 +119,10 @@ Mechanics that make it stick:
 
 Origin: 2026-06-11, jailBird PR #87 — a stray script rode a jj snapshot into a PR, failed a CI gate the local set didn't replicate, and a blind command chain merged anyway. Master went red. Dave's verdict: "CI gates should be hard. If the build fails, we do not merge. Stop and solve it."
 
+### "Check VK" = a grooming pass, not a status readout (Dave's order, 2026-06-13)
+
+VK = **Vikunja** at projects.ericbond.net (shared instance token at `op://vault.ericbond.net/projects api key/password`; conventions in the `using-vikunja` skill). When Dave says **"check VK"**, do NOT just read the board back to him. Go out and look at **all** the tickets across the relevant project(s) and proactively **GROOM** them: any new/raw ticket gets a proper title (`⚪ #<id> — <title>`), a real description, the right label, and correct bucket placement; flag anything stale, mis-bucketed, done-but-still-open, or missing detail, and surface follow-up tickets the recent work implies. Treat "check VK" as "review and tidy the backlog," then report what you groomed.
+
 ## Fleet sync architecture
 
 The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
