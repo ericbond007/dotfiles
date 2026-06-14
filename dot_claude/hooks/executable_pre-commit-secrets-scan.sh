@@ -14,17 +14,21 @@ if [[ ! "$COMMAND" =~ git[[:space:]]commit ]]; then
   exit 0
 fi
 
-# Get the staged diff
-DIFF=$(cd "$CWD" && git diff --cached 2>/dev/null || true)
+# Get the staged diff — only NON-template files (templates legitimately carry
+# placeholders/op:// refs; rendered secret files are gitignored). Mirrors the real
+# git hook /opt/services/.githooks/pre-commit — keep the two in sync.
+SCAN_FILES=$(cd "$CWD" && git diff --cached --name-only --diff-filter=d 2>/dev/null | grep -vE '\.(tpl|sample|example|template)$' || true)
+DIFF=""
+[[ -n "$SCAN_FILES" ]] && DIFF=$(cd "$CWD" && git diff --cached -- $SCAN_FILES 2>/dev/null || true)
 
 if [[ -z "$DIFF" ]]; then
   exit 0
 fi
 
-# Check for added lines (+ prefix) containing secret patterns
-# Exclude op:// references (1Password template refs are safe)
-# Exclude comments and .tpl template source lines
-SUSPECT=$(echo "$DIFF" | grep -E '^\+' | grep -v '^+++' | grep -v 'op://' | grep -v '^+#' | grep -iE '(password|passwd|secret|token|api.?key|credential)\s*[:=]' | grep -ivE '(password|token|secret|key)\s*[:=]\s*["'"'"']?\s*$' | grep -ivE '\{\{|\$\(' || true)
+# Added lines (+ prefix) with a secret-ish key before : or =, EXCLUDING: op:// refs,
+# comments, empty values, template interpolation ({{ }} / $( )), and YAML env-var
+# references (recyclarr's !env_var / !ENV — a name, never a value).
+SUSPECT=$(echo "$DIFF" | grep -E '^\+' | grep -v '^+++' | grep -v 'op://' | grep -v '^+#' | grep -iE '(password|passwd|secret|token|api.?key|credential)\s*[:=]' | grep -ivE '(password|token|secret|key)\s*[:=]\s*["'"'"']?\s*$' | grep -ivE '\{\{|\$\(|!env_var|!ENV' || true)
 
 if [[ -n "$SUSPECT" ]]; then
   echo "BLOCKED: Possible plaintext secret in staged changes." >&2
