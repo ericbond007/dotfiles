@@ -142,6 +142,13 @@ Same epistemics as the "Check VK" / "trust the host, not your assumption" rules 
 
 A ticket describes a problem or a goal; it is **not** authorization to pick a fix and apply it. **Investigate and root-cause proactively** — that's the value, go as deep as needed. But the **remediation approach is Dave's call**, especially anything that changes config, or disables / removes / reconfigures a running service, monitor, or his setup. Stop at "here's the confirmed source + the fix options, with a recommendation" and **ask before touching it**. Do **not** assume the intended outcome unless the ticket states it explicitly — "investigate X" / "reduce Y" means *find it and propose*, not unilaterally remediate. Don't close a ticket on a fix Dave didn't approve.
 
+### Monitoring: every new service gets a Kuma monitor + a Prometheus signal (Dave's order, 2026-06-14)
+
+When standing up a new service on the fleet, wire it into monitoring before calling it done:
+- **Uptime Kuma (mandatory).** Add a monitor at uptime.ericbond.net — prefer an HTTP **keyword** check, not just status-200, so a 200-but-broken page is caught (the 2026-06-14 Roundcube "Internal Error" was exactly this: HTTP 200, error body). Kuma's `monitor_status` is scraped by Prometheus and a `KumaMonitorDown` rule routes through the existing Alertmanager → `incident-triage` → **The Claw**, so adding a Kuma monitor automatically gets you alerting. Programmatic adds: `uptime-kuma-api` with the 1P **"Uptime Kuma Admin"** login.
+- **Prometheus signal.** Every service gets a baseline: containers are already covered by **cAdvisor**, public endpoints by the **blackbox-exporter** probe list (`prometheus.yml`). Add a **dedicated exporter** only when the service exposes metrics worth alerting/dashboarding on — don't manufacture exporters for services with no useful metrics.
+- **Why both:** Kuma = blackbox "is it up / serving the right content" (synthetic, content-aware); Prometheus = whitebox internal telemetry + trends. The Roundcube outage went unnoticed because it was a content break Kuma *could* catch but wasn't wired to alert — both halves matter.
+
 Origin: 2026-06-13, **#1240** — ticket said "investigate the root source of MariaDB `Aborted_connects` and reduce it." I correctly traced it to a Uptime Kuma port-monitor probing :3306 every 60s — then on my own judgment **disabled that monitor and closed the ticket**. Disabling part of Dave's monitoring was his decision to make. The investigation was wanted; the unilateral fix was the overstep. Same epistemics as the rules above: my judgment doesn't substitute for Dave's explicit choice.
 
 ## Fleet sync architecture
