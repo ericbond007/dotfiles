@@ -137,6 +137,12 @@ When something looks broken, keep what I **measured** strictly separate from wha
 
 Same epistemics as the "Check VK" / "trust the host, not your assumption" rules above — applied to diagnosis instead of tickets.
 
+### Don't assume my intent on a ticket — investigate freely, but ASK before remediating (Dave's order, 2026-06-13)
+
+A ticket describes a problem or a goal; it is **not** authorization to pick a fix and apply it. **Investigate and root-cause proactively** — that's the value, go as deep as needed. But the **remediation approach is Dave's call**, especially anything that changes config, or disables / removes / reconfigures a running service, monitor, or his setup. Stop at "here's the confirmed source + the fix options, with a recommendation" and **ask before touching it**. Do **not** assume the intended outcome unless the ticket states it explicitly — "investigate X" / "reduce Y" means *find it and propose*, not unilaterally remediate. Don't close a ticket on a fix Dave didn't approve.
+
+Origin: 2026-06-13, **#1240** — ticket said "investigate the root source of MariaDB `Aborted_connects` and reduce it." I correctly traced it to a Uptime Kuma port-monitor probing :3306 every 60s — then on my own judgment **disabled that monitor and closed the ticket**. Disabling part of Dave's monitoring was his decision to make. The investigation was wanted; the unilateral fix was the overstep. Same epistemics as the rules above: my judgment doesn't substitute for Dave's explicit choice.
+
 ## Fleet sync architecture
 
 The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
