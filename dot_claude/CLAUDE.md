@@ -127,6 +127,16 @@ VK = **Vikunja** at projects.ericbond.net. **FIRST load the `using-vikunja` skil
 
 When Dave says **"check your memory"** (or "reload/refresh your memory"), **re-read `~/.claude/CLAUDE.md` in full** — don't just skim the per-project `MEMORY.md` index or trust what's already in context. This file holds the canonical fleet behaviors and Dave actively updates it; the re-read is how I pick up changes he's made (the "Check VK" rule above was added and then surfaced to me exactly this way). The auto-loaded per-project memory is secondary — this CLAUDE.md is the source of truth for how I operate, so going back to it is the whole point.
 
+### Don't fabricate a root cause — observation ≠ inference (Dave's order, 2026-06-13)
+
+When something looks broken, keep what I **measured** strictly separate from what I'm **guessing**, and never let a guess harden into a stated fact — not in chat, and absolutely not in durable records (wiki post-mortems, memory, tickets, commit messages). Rules:
+
+- **Absence of expected evidence is evidence against the theory.** If my explanation would leave a trace and the trace isn't there, the theory is probably wrong. (2026-06-13: I declared a kernel OOM-killer cascade on wanda while `journalctl` showed **zero** OOM lines — the missing log should have killed the theory, not been waved away.)
+- **Prefer the mundane explanation.** "Someone is rebooting / shutting the box down" beats "the kernel OOM-reaped every daemon" when both fit the symptoms and I have no proof of the dramatic one. Ask the boring question first — *is this host just being shut down or restarted?* — before inventing a catastrophe. (The wanda "outage" was Dave deliberately shutting it down for an unrelated reason; my `Yunix` containerd-shim errors were the host **stopping**, not memory pressure.)
+- **Verify the cause with the source before carving it in.** A wrong post-mortem misleads the next debugger and a fabricated incident spawns red-herring work — off this one misread I filed two bogus tickets (#1463/#1464) and wrote a fictional wiki incident entry. Confirm the cause (often by just asking Dave) before writing the record; if I must record before confirming, label it explicitly as a hypothesis, not a finding.
+
+Same epistemics as the "Check VK" / "trust the host, not your assumption" rules above — applied to diagnosis instead of tickets.
+
 ## Fleet sync architecture
 
 The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
