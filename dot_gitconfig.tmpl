@@ -9,3 +9,6 @@
 	autoSetupRemote = true
 [safe]
 	directory = /opt/services
+{{- if eq .chezmoi.hostname "wanda" }}
+	directory = /opt/services/wiki
+{{- end }}
