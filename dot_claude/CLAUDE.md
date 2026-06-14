@@ -123,6 +123,10 @@ Origin: 2026-06-11, jailBird PR #87 — a stray script rode a jj snapshot into a
 
 VK = **Vikunja** at projects.ericbond.net. **FIRST load the `using-vikunja` skill** — for ANY VK work, not just "check VK." It has the auth, the Python/urllib helper, the v2.3 quirks (e.g. **`POST /tasks/{id}` replaces the WHOLE task body — GET→mutate→POST or you'll zero the description**; bucket assignment lives in a join table and `?expand=buckets` lies — verify via `GET /projects/{p}/views/{v}/tasks`), and the title/description/label/bucket conventions. Do NOT wing the API from a memory note with curl+jq (that botched a ticket create on 2026-06-13). When Dave says **"check VK"**, do NOT just read the board back: go look at **all** tickets across the relevant project(s) and proactively **GROOM** them — any new/raw ticket gets a proper title (`⚪ #<id> — <title>`), a real description, the right label, correct bucket; flag anything stale, mis-bucketed, done-but-still-open, or missing detail; and surface follow-up tickets the recent work implies. Treat "check VK" as "review and tidy the backlog," then report what you groomed.
 
+### "Check your memory" = re-read this CLAUDE.md (Dave's order, 2026-06-13)
+
+When Dave says **"check your memory"** (or "reload/refresh your memory"), **re-read `~/.claude/CLAUDE.md` in full** — don't just skim the per-project `MEMORY.md` index or trust what's already in context. This file holds the canonical fleet behaviors and Dave actively updates it; the re-read is how I pick up changes he's made (the "Check VK" rule above was added and then surfaced to me exactly this way). The auto-loaded per-project memory is secondary — this CLAUDE.md is the source of truth for how I operate, so going back to it is the whole point.
+
 ## Fleet sync architecture
 
 The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
