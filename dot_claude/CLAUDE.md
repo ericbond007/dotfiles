@@ -154,6 +154,14 @@ When standing up a new service on the fleet, wire it into monitoring before call
 
 Origin: 2026-06-13, **#1240** — ticket said "investigate the root source of MariaDB `Aborted_connects` and reduce it." I correctly traced it to a Uptime Kuma port-monitor probing :3306 every 60s — then on my own judgment **disabled that monitor and closed the ticket**. Disabling part of Dave's monitoring was his decision to make. The investigation was wanted; the unilateral fix was the overstep. Same epistemics as the rules above: my judgment doesn't substitute for Dave's explicit choice.
 
+### Major version bumps need their app-level migration, not just packages + reboot (Dave's order, 2026-06-14)
+
+A `pacman -Syu` installs new binaries; it does **not** run a datastore's internal migration. After a **major** version jump of any stateful engine, run its catalog/system-table upgrade as an explicit part of the upgrade — then exercise a real operation — before calling the upgrade done:
+
+- **MariaDB / MySQL**: `sudo mariadb-upgrade` (migrates the `mysql.*` system tables). Skip it and e.g. `mysql.proc` stays on the old column layout — the server serves apps fine, but anything reading the routine catalog fails, including `mariadb-dump`, so the **nightly backup silently breaks** (`Column count of mysql.proc is wrong … Please use mariadb-upgrade`). Bit wanda's 11.8→12.3 P1 upgrade (2026-06-13) — caught only because **The Claw** paged on `mariadb-backup.service` failing.
+- **PostgreSQL**: a major bump needs `pg_upgrade` (or dump/restore) + post-upgrade `REINDEX`/`ANALYZE` — see `runbooks/postgres-major-upgrade.md`.
+- The failure mode is **silent**: the daemon stays `active` and apps work; only the catalog-touching path (a backup, a stored-routine query) breaks. So when a `-Syu` crosses a major version of any DB/stateful engine (mariadb, postgresql, redis/valkey RDB-format jumps…), look up its migration step, run it, and **prove it** with a representative operation — run the backup, don't just check `systemctl status`. A reboot-and-containers-return check does NOT cover this class.
+
 ## Fleet sync architecture
 
 flattop/wanda/serp share config via **chezmoi** with **GitHub** (`ericbond007/dotfiles`, `origin/master`) as the hub — edit on one host, propagate everywhere. Source tree: `~/.local/share/chezmoi/`. Tracked: `~/.claude/{hooks,skills,commands,CLAUDE.md}` + `settings.json` (templated with hostname conditionals). NOT tracked, per-host: `settings.local.json`, `projects/.../memory/`.
