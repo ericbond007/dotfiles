@@ -7,3 +7,5 @@
 	branch = false
 [push]
 	autoSetupRemote = true
+[safe]
+	directory = /opt/services
