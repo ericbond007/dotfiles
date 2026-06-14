@@ -21,8 +21,8 @@ Network: `10.0.0.0/24` domain `ericbond.net`. Live host scanner at `https://scan
 
 - **`/opt/services`** — most custom running services live here. Check there first when investigating services. The wiki also lives under `/opt/services/wiki`.
 - **etckeeper** — `/etc` (and tracked service files) is git-backed via etckeeper. Treat etckeeper-tracked state as the per-host system-configuration reference. After editing `/etc` or service files on wanda/serp, commit via etckeeper, then update the relevant `/opt/services/wiki/docs/` page.
-- **`/opt/services` git discipline (NOT etckeeper).** The mono-repo holds *loose* service configs only — each service's `docker-compose.yml` + non-secret config + `.tpl` templates; rendered-secret files and data dirs are gitignored. It's root-owned: commit with `sudo git -C /opt/services`. After editing a service, commit **that service** deliberately with a real message — **never `git add -A`** (that caused the 2026-05-25 "kitchen-sink" incident; the `services-config-commit` auto-commit timer is disabled — leave it). A tracked `core.hooksPath=.githooks` enforces a **pre-commit** secret scan on every commit (use `op://` refs, never plaintext) and a **post-commit** push to the serp mirror that emails on failure (#1420). New top-level service dirs MUST get their data/secret files gitignored before committing (the pre-commit warns). The four nested app repos — `btown`, `jail/_src`, `ot-revisited`, `wiki` — were **excised** into their own backed-up repos (btown/wiki → `serp:/opt/git-backups/{btown,wiki}.git`; jailBird/ot-revisited → GitHub); they're gitignored, don't re-add them. A daily `opt-services-drift-alert.timer` emails Dave if drift sits uncommitted >3 days (#1421). Restore runbook: `wiki/docs/runbooks/opt-services-restore.md`.
-- **Credstore secrets (`op-deploy-secrets`) are drift-prone — verify before re-deploying. LANDMINE.** Many wanda services use: `<svc>-creds/*.tpl` (or `/etc/**/*.tpl`) → `sudo op-deploy-secrets` (`op inject` + `systemd-creds encrypt`) → `/etc/credstore.encrypted/<svc>` → installed at boot to `/run/<svc>-conf/` (the app's real config symlinks there). **A `.tpl` can silently drift from the live value** — e.g. an API key regenerated in-app and never written back. A plain `systemctl restart` is safe (it re-installs from the credstore, which holds the live value), **BUT `sudo op-deploy-secrets` (full run) re-encrypts EVERY credstore from its `.tpl`** — so a stale `.tpl` silently overwrites the live secret and breaks the service. On 2026-06-11 this bit Prowlarr (credstore re-encrypt for an auth fix pushed a stale API key → 401'd exportarr + every Prowlarr-synced indexer in Lidarr/Radarr/Sonarr); all four *arr `.tpl`s were drifted. **Rules: (1) before re-deploying a credstore or running the full `op-deploy-secrets`, diff each `.tpl`'s secret against the live/deployed value (`docker inspect exportarr-<app>` env, or `/run/<svc>-conf/`); (2) ALWAYS `op-deploy-secrets --dry-run` first and treat any unexpected `CHANGED` as a landmine, not a routine update; (3) prefer a targeted single-service re-encrypt over the full run.** Mechanism + remediation tracked in Vikunja services #1391.
+- **`/opt/services` git discipline (NOT etckeeper).** Root-owned mono-repo of loose service configs. Commit **per-service** with `sudo git -C /opt/services` and a real message — **never `git add -A`** (caused the 2026-05-25 "kitchen-sink" incident; the auto-commit timer is disabled — leave it). Gitignore a new service's data/secret files **before** committing. → full mechanism (the `.githooks` scans, excised nested repos, drift timer, restore runbook) is in the **`deploying-wanda-services`** skill.
+- **Credstore secrets (`op-deploy-secrets`) are drift-prone. LANDMINE.** A full `op-deploy-secrets` run re-encrypts EVERY credstore from its `.tpl`, so a stale `.tpl` silently overwrites the live secret and breaks the service (bit Prowlarr + every *arr 2026-06-11). Rules: diff each `.tpl` against the live value first; ALWAYS `--dry-run` and treat any unexpected `CHANGED` as a landmine; prefer a targeted single-service re-encrypt. → full pipeline + remediation in the **`deploying-wanda-services`** skill.
 
 ## Behavior rules
 
@@ -148,6 +148,7 @@ When standing up a new service on the fleet, wire it into monitoring before call
 - **Prometheus blackbox-exporter = the single synthetic-check ALERT source.** Add the service URL to the blackbox probe list in `prometheus.yml`; `probe_success == 0` already routes through Alertmanager → `incident-triage` → **The Claw**. Default module `http_site` (status only). For endpoints that can serve **200-but-broken** (webmail, login pages), use/add a **content-matching** module (`fail_if_body_not_matches_regexp`, e.g. the `http_login` module + the `blackbox-content` job) — the 2026-06-14 Roundcube break (HTTP 200, "Internal Error" body) is why status-only isn't enough.
 - **Uptime Kuma = status-page UI ONLY.** Add a monitor at uptime.ericbond.net for the human dashboard (`uptime-kuma-api` with the 1P **"Uptime Kuma Admin"** login), but Kuma does **NOT** drive alerts — blackbox is the one alert source. Do not re-add a Kuma→Prom alert rule (`KumaMonitorDown` was removed 2026-06-14); that double-alerts.
 - **Prometheus metrics.** Containers are covered by **cAdvisor**; add a dedicated exporter only when the service exposes metrics worth alerting/dashboarding on.
+- **Scheduled jobs: `enable --now`, then verify `is-active`.** When adding any systemd timer, use `systemctl enable --now` — **never bare `enable`**. `enable` alone only symlinks the timer into `timers.target.wants`; it does **not** start it in the running system until the next reboot, so on a long-uptime box an enabled timer sits `inactive` and silently never fires. Always confirm `systemctl is-active <timer>` after enabling. If the job is critical (backup/sync/credstore/cert), add it to the `CRITICAL` list in `/opt/services/ops/systemd-timer-watchdog.sh` (host-aware, wanda + serp) — the `timers` Prom rule group then pages The Claw on enabled-but-inactive / stale-past-2.5×-cadence / non-zero-exit. This is the systemic backstop for the silent-scheduled-job-death class: `config-backup` dark 6 days (2026-06-13, #1421), living-pi 12 days (2026-06-04), runaway-churn 10 days (2026-05-25). Note `node_systemd_timer_last_trigger_seconds` is NOT collected (node-exporter's systemd collector excludes `.timer` units) and `SystemdUnitFailed` only catches `failed`, not `inactive` — the watchdog's textfile metrics are what cover timer liveness.
 - **Why this split:** blackbox and Kuma both do "is it up" synthetic checks — running both as alert engines was the redundancy removed 2026-06-14. Blackbox wins as the engine (Grafana history, cert-expiry, content-matching, already wired to triage); Kuma's real value is just its status-page UI.
 - **Footnote — Kuma can't auth through Authelia:** its axios client strips the reserved `Proxy-Authorization` header (verified via Authelia logs → requests arrive `<anonymous>`), so SSO-gated APIs can't be keyword-checked from Kuma. Use a blackbox probe with the header (blackbox doesn't strip it) + a dedicated lldap service account if you need authenticated content checks. For Traefik specifically, the router data is already in Prom (`traefik_router_requests_total`) — don't duplicate it.
 
@@ -155,53 +156,9 @@ Origin: 2026-06-13, **#1240** — ticket said "investigate the root source of Ma
 
 ## Fleet sync architecture
 
-The flattop/wanda/serp fleet shares configuration via chezmoi with GitHub as the hub. This architecture is what makes "edit on one machine, see it everywhere" work.
+flattop/wanda/serp share config via **chezmoi** with **GitHub** (`ericbond007/dotfiles`, `origin/master`) as the hub — edit on one host, propagate everywhere. Source tree: `~/.local/share/chezmoi/`. Tracked: `~/.claude/{hooks,skills,commands,CLAUDE.md}` + `settings.json` (templated with hostname conditionals). NOT tracked, per-host: `settings.local.json`, `projects/.../memory/`.
 
-### What lives where
-
-| Location | Role |
-|---|---|
-| `~/.local/share/chezmoi/` | chezmoi source tree (git repo) — the canonical state |
-| `github.com:ericbond007/dotfiles` | shared hub; all three hosts push/pull from `origin/master` |
-| `~/.claude/hooks/*.sh` | rendered working copies (what Claude Code invokes) |
-| `~/.claude/settings.json` | rendered from `dot_claude/settings.json.tmpl` with hostname conditionals |
-| `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/CLAUDE.md` | all chezmoi-tracked — same on every host |
-| `~/.claude/settings.local.json` | per-host permission overrides — **not** chezmoi-tracked |
-| `~/.claude/projects/.../memory/` | per-host memories — **not** chezmoi-tracked |
-
-### Hooks that make it work
-
-- `chezmoi-preflight.sh` — **PreToolUse** on `Edit|Write|MultiEdit`. Warns on stderr if the chezmoi source is behind origin (cached 5-min fetch) or if I'm editing a rendered target whose `.tmpl` I should edit instead.
-- `chezmoi-readd.sh` — **PostToolUse** on `Edit|Write|MultiEdit`. When the edited path is a chezmoi-managed target and not templated, runs `chezmoi re-add` so the source tree mirrors `$HOME`.
-- `chezmoi-sync.sh` — **not registered as a hook**. Manually invoked (typically by Claude driving the workflow, sometimes by the user via `/chezmoi-sync`). Refuses on a dirty tree, pushes `origin/master`, then ssh's each peer (self-excluded via `hostname -s`) to run `chezmoi update`.
-- `notify-tmux.sh` — **Notification**. Only fires inside tmux (guarded by `$TMUX`). Calls `notify-send` with tmux window context so Claude notifications reach KDE even when tmux is swallowing the OSC 9 sequence.
-
-Wanda additionally registers `block-generated-files`, `block-service-owned-files`, `firewall-validate`, `pre-commit-secrets-scan` (PreToolUse) and `firewall-post-edit`, `wiki-update-reminder` (PostToolUse) via the `{{ if eq .chezmoi.hostname "wanda" }}` block in `dot_claude/settings.json.tmpl`. Those scripts ship in the shared source tree but never register elsewhere.
-
-### settings.json.tmpl pattern
-
-Each event is a JSON array. Shared entries live at the top level. Host-specific entries are wrapped in a trailing conditional so the comma stays valid JSON on both branches:
-
-```jsonc
-"PreToolUse": [
-  { "matcher": "Edit|Write|MultiEdit",
-    "hooks": [{ "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" }] }{{ if eq .chezmoi.hostname "wanda" }},
-  { "matcher": "Edit|Write",
-    "hooks": [{ "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" }] }{{ end }}
-]
-```
-
-Verify per-host with `jq ".hooks | to_entries | map({event: .key, count: (.value | length)})" ~/.claude/settings.json` — counts should match the shared+host-specific sum.
-
-### Onboarding a new host
-
-1. Install: chezmoi, git, jq, notify-send (if graphical), openssh. Install Claude Code if the host will run it.
-2. `ssh-keyscan github.com >> ~/.ssh/known_hosts` (verify fingerprint matches GitHub's published Ed25519 key `SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`).
-3. `chezmoi init --apply git@github.com:ericbond007/dotfiles.git`.
-4. Exchange SSH keys so the new host can ssh to the existing peers and they to it.
-5. Add the new short hostname to the `peers=(...)` array in `dot_claude/hooks/executable_chezmoi-sync.sh`.
-6. If the host needs its own hooks, drop them in `dot_claude/hooks/executable_<name>.sh` and wrap the `settings.json.tmpl` registration in `{{ if eq .chezmoi.hostname "<host>" }} ... {{ end }}`.
-7. Commit, push, sync. Verify the new host's rendered `settings.json` matches expectations.
+The routine edit→sync flow is handled by the `chezmoi-readd` PostToolUse hook + the **`chezmoi-sync`** skill/command (refuses on a dirty tree, pushes, then `chezmoi update` on each peer). Adding or changing a hook → **`writing-fleet-hooks`** skill. The full topology reference — what-lives-where table, the sync/notify hooks, and onboarding a new host — is in the **`fleet-sync-architecture`** skill.
 
 ## Memory vs this file
 
