@@ -48,9 +48,13 @@ AUR PKGBUILDs run arbitrary maintainer code at **build and install** time. The 2
 
 The `aurvulntest` checker (the 2026-06-11 infected-package list) is the post-hoc audit; this rule is the pre-emptive guard. Coverage: all four chezmoi peers get the files (living-pi is a sync peer, listed by IP `10.0.0.10` in `chezmoi-sync.sh`'s `peers=()`). Where each layer is *active* depends on what's installed: flattop/wanda/serp run Claude Code + yay + paru, so both layers are live. living-pi (ALARM) has yay but no paru and no Claude Code — so its yay review-menu config is live, while the paru.conf and the PreToolUse hook are present-but-inert there.
 
-### Verify the remote shell before sending shell-specific syntax
+### Shells: my Bash tool runs zsh locally / lands in fish over ssh — write for each (verified 2026-06-14)
 
-The fleet runs fish, but remote and non-fleet hosts (routers, Steam Deck, appliances) vary — fish syntax in zsh/bash (or vice versa) can silently no-op, which is worse than erroring. Before piping commands over ssh to an unfamiliar host, check its shell (`echo $SHELL` or `ps -p $$`) and write for that dialect.
+Concrete map: **Dave's interactive/login shell is fish on every host** (flattop/wanda/serp — CachyOS/Arch default). But the **Claude Code Bash tool can't use fish (non-POSIX) and falls back to zsh on flattop**, so MY local commands run in **zsh**, and when I `ssh wanda`/`serp` they land in **fish**. So:
+
+- **Local (zsh):** tamed via `~/.zshrc` (`unsetopt nomatch` → unmatched globs pass literally instead of erroring `no matches found`; `setopt sh_word_split`). That shim is **load-bearing for the tool — don't "clean it up"** (it's flattop-only, not chezmoi-synced; wanda/serp aren't CachyOS). Still single-quote args containing `{} * [] ~`, and wrap in `bash -c '...'` when you need guaranteed bash semantics.
+- **Remote (fish on wanda/serp):** NEVER send bare bash-isms over ssh — `<(…)`, `if/then/fi`, `for…do…done`, `$status` vs `$?` all break in fish. Always `ssh host 'bash -lc "…"'` or `ssh host 'sudo bash -s' <<'EOF' … EOF` (the heredoc pattern is the reliable default).
+- **Unfamiliar hosts** (routers, Steam Deck, appliances): check first (`echo $SHELL`) and write for that dialect — a silent fish/zsh no-op is worse than an error.
 
 ### Prefer the package manager over hand-patching
 
