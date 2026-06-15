@@ -1,6 +1,6 @@
 # Fleet-wide Claude Code instructions
 
-Applies on every machine in the ericbond fleet (flattop, wanda, serp). Machine-specific behaviors stay in per-host memory at `~/.claude/projects/-home-eric/memory/`.
+Applies on every machine in the ericbond fleet (flattop, wanda, serp). **balganor** and **living-pi** are chezmoi sync peers too, but run no Claude Code — synced config lands there inert. Machine-specific behaviors stay in per-host memory at `~/.claude/projects/-home-eric/memory/`.
 
 ## User
 
@@ -14,6 +14,7 @@ Applies on every machine in the ericbond fleet (flattop, wanda, serp). Machine-s
 - **flattop** — primary workstation; CachyOS/Wayland/KDE; kitty + tmux. This is typically where I'm running.
 - **wanda** (10.0.0.x) — Arch server. Hosts Home Assistant, docker services, firewall (nftables), own UPS. Has machine-specific Claude hooks (firewall/service-owned-files/wiki/secrets) registered via the hostname-conditional block in `dot_claude/settings.json.tmpl`.
 - **serp / serpentii** (10.0.0.9) — Arch server. GTX 980 Ti, UPS CyberPower CP1500 on USB, NUT netserver on 10.0.0.9:3493. Runs kernel **6.19.x** with the nvidia-580xx AUR module working — the earlier "pinned to 6.18.2 / incompatible with ≥6.19" claim is **lifted** (verified 2026-05-15; see `/opt/services/wiki/docs/reference/incidents.md` → 2026-05-15 serp OOM post-mortem). Still: after any major `linux`/`linux-headers` jump, rebuild and confirm the nvidia-580xx AUR module **before** rebooting (out-of-tree module; a failed build wedges the DRM path). Bootloader: syslinux on BIOS/GPT, root=sda2 ext4. DM=SDDM. `/usr/bin/fish` must remain in `/etc/shells`.
+- **balganor** (10.0.0.8) — Arch **media NAS** on a repurposed ~2009 desktop (Phenom II X4, GTX 285, 8 GB, kernel 7.0.x). Serves a **6 TB `md0` RAID5** (ext4 `/home/eric/media`; NFS shares `/srv/nfs/{movies,tv,music,misc}`) plus the long-lived `waterSnake` X/Twitter bot (pm2) + mariadb. **chezmoi sync peer**, but shell is **bash, not fish**, and **no Claude Code** — synced hooks/skills/agents are inert here (same tier as living-pi). Dormant cruft: idle Kafka/Confluent docker images, a vestigial pihole lighttpd UI on :85 (**not** a DNS host). Full details + the ⚠️ **degraded RAID5** (2 of 3 disks, no redundancy) in per-host memory `reference_balganor`.
 
 Network: `10.0.0.0/24` domain `ericbond.net`. Live host scanner at `https://scan.ericbond.net`. **Router SSH login is `admin`** — not `root`, not `eric`; don't burn turns on key permutations.
 
