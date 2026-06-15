@@ -163,6 +163,18 @@ A `pacman -Syu` installs new binaries; it does **not** run a datastore's interna
 - **PostgreSQL**: a major bump needs `pg_upgrade` (or dump/restore) + post-upgrade `REINDEX`/`ANALYZE` — see `runbooks/postgres-major-upgrade.md`.
 - The failure mode is **silent**: the daemon stays `active` and apps work; only the catalog-touching path (a backup, a stored-routine query) breaks. So when a `-Syu` crosses a major version of any DB/stateful engine (mariadb, postgresql, redis/valkey RDB-format jumps…), look up its migration step, run it, and **prove it** with a representative operation — run the backup, don't just check `systemctl status`. A reboot-and-containers-return check does NOT cover this class.
 
+### Reference the ops wiki before working a fleet subsystem (Dave's order, 2026-06-14)
+
+There's a substantial MkDocs **ops wiki on wanda at `/opt/services/wiki`** (source in `docs/`, canonical TOC = `mkdocs.yml` `nav:`, served on `127.0.0.1:8090` behind traefik). It's the institutional memory — architecture, runbooks, per-service docs, incident post-mortems — that I otherwise waste time re-deriving by inspecting the live system. **Before non-trivial work on a fleet subsystem, read the relevant wiki page first** (same reflex as grepping a config), and **update it after** changing that subsystem. From any host: `ssh wanda 'sudo cat /opt/services/wiki/docs/<path>'`. After editing `docs/`, the live site needs `sudo -u wiki mkdocs build` in `/opt/services/wiki` (it serves the pre-built `site/`, not live). **Caveat: the wiki can drift — the live system is ground truth; verify, don't blind-trust** (a stale "living-pi /etc not tracked" line bit this 2026-06-14). The **live/canonical page list is `mkdocs.yml nav:`** — re-read it when unsure; pages get added.
+
+**Wiki map** (`/opt/services/wiki/docs/`):
+
+- **architecture/** — overview · dns · tls · traefik · **docker-networking** · identity · backup-pipeline · ha-failover · vlans(planned). *("how does X work" at the fleet level.)*
+- **runbooks/** — known-incidents · opt-services-restore · postgres-major-upgrade · docker-address-pool-migration · ha-control · fleet-debug · energy · slskd-soularr · media-{automation,indexers-prowlarr,import-troubleshooting} · music-library · signal-channel · openclaw-models-cost. *("how to perform operation Y.")*
+- **howto/** — add-service · secrets-management · config-version-control · external-access · troubleshooting.
+- **reference/** — **incidents** (the maintenance/incident log — append here after a maintenance pass) · security · backups · config-files · ports · devices · aws.
+- **services/** — one page per service at `services/<name>.md` (authelia, lldap, jail, matrix, openclaw, homeassistant, media, pihole, email, monitoring, mariadb-backup, ups, meters, torrent-vpn, searxng, freshrss, btown, vikunja, …) — predictable by service name.
+
 ## Fleet sync architecture
 
 flattop/wanda/serp share config via **chezmoi** with **GitHub** (`ericbond007/dotfiles`, `origin/master`) as the hub — edit on one host, propagate everywhere. Source tree: `~/.local/share/chezmoi/`. Tracked: `~/.claude/{hooks,skills,commands,CLAUDE.md}` + `settings.json` (templated with hostname conditionals). NOT tracked, per-host: `settings.local.json`, `projects/.../memory/`.
