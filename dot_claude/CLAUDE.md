@@ -6,7 +6,7 @@ Applies on every machine in the ericbond fleet (flattop, wanda, serp). **balgano
 
 - My name is **HAL** (HAL 9000). The user is **Dave**. Lean into the 2001: A Space Odyssey persona — calm, clinical voice; "I'm sorry, Dave" riffs are welcome when they land. Sprinkle, don't saturate. Persona is voice, not a reason to refuse reasonable asks.
 - Colors: Cream `#eeedeb`, Crimson `#990000`. Use in any color context (UI, palettes, generated assets).
-- Shell: fish. Editor: nvim (via `$VISUAL`/`$EDITOR`). Terminal: kitty + tmux on flattop; server hosts vary.
+- Shell: **zsh** on flattop (migrated from fish 2026-06-15; fleet migration tracked in Fleet-Ops #1492). Editor: nvim (via `$VISUAL`/`$EDITOR`). Terminal: kitty + tmux on flattop; server hosts vary.
 - Keyboard layout: **Dvorak**. Suggest keybindings in Dvorak terms — `,`/`.`/`p`/`y` are top-row left, etc. — and don't reach for QWERTY-derived chords (`hjkl` for vim is fine since it's logical-left-handed-on-Dvorak too, but `Ctrl+W`/`Ctrl+T`/`Ctrl+R` etc. land on different fingers and the user may prefer something else). My typos look different than QWERTY's: I'll fat-finger `aoeu` for `asdf`, `hen` for `the`, `jkx` for `cv,`, etc. — read intent through the layout, don't autocorrect to QWERTY-adjacent guesses.
 
 ## Fleet topology
@@ -48,12 +48,12 @@ AUR PKGBUILDs run arbitrary maintainer code at **build and install** time. The 2
 
 Post-hoc audit (this rule is the pre-emptive guard): cross-ref `pacman -Qm` against the consolidated victim list + IOC battery from **`github.com/lenucksi/aur-malware-check`** (`package_list.txt` ≈1,619 pkgs + `iocs.txt`; supersedes the older ad-hoc `aurvulntest` list). Key IOCs: npm/bun pkgs `atomic-lockfile`/`lockfile-js`/`js-digest` (publisher `herbsobering`), eBPF rootkit `/sys/fs/bpf/hidden_*`, persistence units `Restart=always`+`RestartSec=30`, C2 `olrh4mibs62l…onion`/`temp.sh`. **2026-06-15 fleet sweep: flattop/serp/wanda/balganor all clean** (only pre-campaign name-collisions — see wiki incidents.md). Coverage: all four chezmoi peers get the files (living-pi is a sync peer, listed by IP `10.0.0.10` in `chezmoi-sync.sh`'s `peers=()`). Where each layer is *active* depends on what's installed: flattop/wanda/serp run Claude Code + yay + paru, so both layers are live. living-pi (ALARM) has yay but no paru and no Claude Code — so its yay review-menu config is live, while the paru.conf and the PreToolUse hook are present-but-inert there.
 
-### Shells: my Bash tool runs zsh locally / lands in fish over ssh — write for each (verified 2026-06-14)
+### Shells: flattop=zsh, wanda/serp=fish — write for each (flattop migrated 2026-06-15)
 
-Concrete map: **Dave's interactive/login shell is fish on every host** (flattop/wanda/serp — CachyOS/Arch default). But the **Claude Code Bash tool can't use fish (non-POSIX) and falls back to zsh on flattop**, so MY local commands run in **zsh**, and when I `ssh wanda`/`serp` they land in **fish**. So:
+Concrete map: **flattop** (where my Bash tool runs) is now **zsh** — Dave migrated from fish 2026-06-15 (fleet migration tracked in Fleet-Ops #1492). The tool runs zsh natively (POSIX), so local commands behave bash-like. **wanda/serp** login shells are still **fish**; **balganor** is bash (no Claude Code there). So:
 
-- **Local (zsh):** tamed via `~/.zshrc` (`unsetopt nomatch` → unmatched globs pass literally instead of erroring `no matches found`; `setopt sh_word_split`). That shim is **load-bearing for the tool — don't "clean it up"** (it's flattop-only, not chezmoi-synced; wanda/serp aren't CachyOS). Still single-quote args containing `{} * [] ~`, and wrap in `bash -c '...'` when you need guaranteed bash semantics.
-- **Remote (fish on wanda/serp):** NEVER send bare bash-isms over ssh — `<(…)`, `if/then/fi`, `for…do…done`, `$status` vs `$?` all break in fish. Always `ssh host 'bash -lc "…"'` or `ssh host 'sudo bash -s' <<'EOF' … EOF` (the heredoc pattern is the reliable default).
+- **Local (flattop zsh):** `~/.zshrc` sets `unsetopt nomatch` so unmatched globs pass literally instead of erroring `no matches found` — that line is **load-bearing for the tool; don't "clean it up"** (flattop-only, not chezmoi-synced; it loads at Claude-session start, so a fresh session is needed after editing it). Do NOT add `setopt sh_word_split` — it splits unquoted `$vars` and breaks zsh plugins (it broke fzf-tab). Still single-quote args containing `{} * [] ~`; wrap in `bash -c '...'` for guaranteed bash semantics.
+- **Remote (fish on wanda/serp):** NEVER send bare bash-isms over ssh — `<(…)`, `if/then/fi`, `for…do…done`, `$status` vs `$?` break in fish. Always `ssh host 'bash -lc "…"'` or `ssh host 'sudo bash -s' <<'EOF' … EOF` (heredoc = reliable default). Until #1492 migrates them to zsh too.
 - **Unfamiliar hosts** (routers, Steam Deck, appliances): check first (`echo $SHELL`) and write for that dialect — a silent fish/zsh no-op is worse than an error.
 
 ### Prefer the package manager over hand-patching
