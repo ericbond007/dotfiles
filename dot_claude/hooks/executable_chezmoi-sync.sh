@@ -11,9 +11,10 @@ set -u
 
 self=$(hostname -s)
 # LAN-only names. The bare `serp` and `living-pi` hostnames resolve to
-# the WAN IP (router/dropbear) via DNS — `serpentii` and 10.0.0.10 force
-# the LAN path so we sync the actual boxes, not the gateway.
-peers=(serpentii wanda flattop balganor bondo 10.0.0.10)
+# the WAN IP (router/dropbear) via DNS, and `bondo` currently resolves to
+# wanda's IP (10.0.0.7 — a wrong DNS record) — so `serpentii`, 10.0.0.250,
+# and 10.0.0.10 force the correct LAN hosts, not the gateway/wrong box.
+peers=(serpentii wanda flattop balganor 10.0.0.250 10.0.0.10)
 
 printf '=== chezmoi fleet sync from %s at %s ===\n' "$self" "$(date -Iseconds)"
 
