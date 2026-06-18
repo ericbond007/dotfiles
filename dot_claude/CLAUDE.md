@@ -40,11 +40,19 @@ Use sudo only when required. Prefer 1Password CLI (`op read ...`) over hardcoded
 
 Never kill processes by name (`pkill`/`killall`) or launch load/stress tests without first inspecting what's running and confirming nothing live is collateral — past failures: a 16-core stress test under Dave's running game (94°C), a broad Firefox kill that nearly hit an active Playwright session. The `blast-radius.sh` PreToolUse hook enforces this fleet-wide: it blocks kill/stress-class commands once and shows the live process table; after genuinely reviewing the list, re-run with the `env BLAST_OK=1` prefix. Don't reflexively prefix to bypass — the review is the point. If anything listed could be Dave's active work, stop and ask.
 
-### Clean up what you start — no stray processes, servers, or loops (Dave's order, 2026-06-18)
+### YOU OWN EVERY PROCESS YOU START — clean up ALL of it (Dave's order, 2026-06-18, emphatic)
 
-**Every background thing you spawn is yours to shut down before you call a task done.** Dev/preview servers (`npm run preview`, `vite`, `astro preview`, `python -m http.server`), polling/`until` loops you background to wait on a job, detached `nohup`/`&` jobs, temp scratch processes — all of it. When a task or session ends, **inventory what you launched** (`pgrep -af`, `ss -ltnp`) and kill anything of yours that's idle. Don't leave a preview server bound to a port for hours; don't leave `until … sleep` loops polling forever after the job they were waiting on already finished. The harness's own MCP/playwright servers, the user's persistent co-pilot browser, and any service the user explicitly wants up are the exceptions — leave those.
+**If you started it, it is YOURS — every process, every port, every background job, in every session and every project, with NO exceptions.** Not "probably mine," not "another session's," not "looks anonymous so skip it." You launched it → you own it → you kill it before the task or session is done. This is non-negotiable and Dave is furious about it because HAL repeatedly left junk running for *hours-to-days* and then blamed phantom sessions.
 
-**And OWN them.** A process you started is *yours*, even when its `ps` line looks anonymous — read the command, the cwd, the task-file path; if you launched it, claim it. Do **not** wave off your own leftover loops or servers as "a concurrent session's" or "not mine." Misattributing your own mess to someone else is worse than the mess — it cost a round of confusion on 2026-06-18 when HAL blamed its own `until`-loops on a phantom session. Check first, claim it, clean it.
+**Track them as you create them, and do an EXHAUSTIVE sweep before you ever say "we're clean."** Everything in this list is yours to account for and shut down:
+- **Background wait-loops of ANY shape** — `until …; do sleep`, `while …; do sleep`, `for … sleep`, anything polling a file/condition. (HAL's miss on 2026-06-18: grepped only for `until grep` and left an `until [ -f /tmp/wm_sheet.png ]; do sleep 3` loop spinning **22 hours** on a file that never came.)
+- **Dev/preview/ad-hoc servers** — `vite`, `vite dev`, `astro preview`, `npm run preview`/`dev`, webpack, `python -m http.server`, `python -m SimpleHTTPServer`, `serve`, any `--directory /tmp` server, anything bound to a port you opened.
+- **Detached jobs** — every `nohup`, every `&`, every `setsid`, every `run_in_background`/Bash background task you spawned.
+- **Temp/scratch processes & browsers** — Playwright/Chromium you launched (NOT the harness's MCP servers or Dave's persistent co-pilot on :28734), tail -f's, watchers.
+
+**The sweep is exhaustive, not a one-pattern grep.** Enumerate broadly: `ps -eo pid,etimes,%cpu,cmd` and scan for shells under your snapshot, `sleep`/`until`/`while` lines, dev-server binaries, and `ss -ltnp` for every listening port you might have opened — across ALL project dirs, not just the one you're in. Long `etimes` = a forgotten stray; investigate it, don't dismiss it.
+
+**The ONLY exceptions** are: the harness's own MCP/playwright servers, Dave's persistent co-pilot browser, system/Dave services (arch-update, actions-runner, snapper, etc.), and anything Dave explicitly said to keep up. Everything else you spawned, you clean. If you're unsure whether you started it, assume you did and verify — never wave it off.
 
 ### Inspect AUR PKGBUILDs before installing
 
