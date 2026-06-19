@@ -320,6 +320,27 @@ See the "Title format + description + severity" section near the top — bugs ge
 
 When a ticket grows too big and gets sliced (e.g. #287 → #287a/b/c/d), create the children as separate tickets and wire the `subtask` relation. Vikunja v2.3 auto-mirrors. Mark the umbrella done when all children are done.
 
+### Organizing a project into group tabs (Views + Labels)
+
+When a backlog grows unwieldy ("things are getting out of hand"), don't just retitle in place — reorganize it into **group tabs**. The vocabulary matters because Dave navigates by it:
+
+- The **tabs across the top of a project are Views** (saved filters). "Add a View" = add a tab. Every project is born with List/Kanban/Table/Gantt; extras are custom filtered Views.
+- A ticket lands in a tab because of its **Labels** (tags). A View is just a filter, and it matches on labels — e.g. a "Wagon train" tab is literally `labels = wagon-train`.
+- Not "group"/"category" (Vikunja has neither as a first-class thing); a **Project** is the sidebar item, a **Bucket** is a Kanban column.
+
+The pattern, per thematic group:
+1. **A Label** — `PUT /labels {title, hex_color}` (reuse an existing label if one already means this group).
+2. **A filtered List View (the tab)** — `PUT /projects/{p}/views` with `{title, view_kind:"list", project_id, filter:{filter:"labels = N && done = false", s:"", sort_by:[], order_by:[], filter_include_nulls:false}}`.
+3. **Tag every member** with that label (and the umbrella ticket too, so it anchors the tab).
+4. Optionally pair with an **umbrella ticket** (subtask relations) for the done-rollup semantic — umbrella and label/tab are complementary, not redundant.
+
+Two rules that bite if ignored:
+
+- **Group by LAYER, not just topic.** Keep in-game-*action*/mechanic tickets separate from *view*/UI/render tickets — they usually live in different sub-projects and mixing them muddies the tab. (A "Camp actions" tab is for the actions; the "scout-ahead *view*" ticket belongs with UI, related-linked, not bucketed as an action.) **Exception:** when the group *is* a cross-layer feature (e.g. "Documentation" = a wiki + a screen + a guidebook item), group by feature — the tab is the feature area.
+- **Views are PROJECT-SCOPED.** A tab only shows tickets in *its own* project; a parent project's view does NOT aggregate child-project tasks. So a cluster that straddles projects renders incompletely. Unify each cluster into one project (move the minority strays — that's also "proper categorization") before relying on its tab.
+
+When you delete redundant/broad Views after building granular ones (`DELETE /projects/{p}/views/{viewID}` — tickets keep their labels), first sweep for tickets that were *only* findable through them and re-home or re-label them, so nothing orphans. Deferred-labelled backlog items are an acceptable exception (they're hidden from active views anyway).
+
 ### `done = false` everywhere except kanban Shipped
 
 Every filtered view (List, Table, Gantt, workstream lists) must include `done = false` in its filter. The Shipped kanban column is the only place done items show up. This rule is invariant — when adding a new view, always include the gate.
@@ -343,6 +364,8 @@ print([p for p in spec['paths'] if 'label' in p])
 - **Empty bodies on DELETE** — strip the `json.loads` for DELETEs, they return empty 204.
 - **Per-page default is small (~50).** Always paginate with `?per_page=50&page=N` and stop when the chunk is shorter than per_page.
 - **The `priority` field uses 1-5 (1=lowest, 5=highest).** Frontend renders ⚪ low (1) / 🟡 mid (2-3) / 🔴 high (4-5).
+- **Views are project-scoped.** A custom View only filters tickets in its own project; parent projects do NOT aggregate child-project tasks into their Views. Cross-project group tabs therefore render incompletely — unify the cluster into one project first.
+- **In migrated projects, the `#N` in a title may NOT be the global task `id`.** If a project was imported (e.g. from a TODO.md), titles often kept the old display numbers while Vikunja assigned fresh global ids — and those display numbers can collide with *other* projects' global ids. Never `GET/POST/relate /tasks/<displayN>`; always resolve the real global `id` from the project task listing first.
 
 ## When to invoke this skill
 
