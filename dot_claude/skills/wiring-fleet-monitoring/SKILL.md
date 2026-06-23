@@ -54,7 +54,20 @@ Login pages and webmail can serve **HTTP 200 with a broken body** (the 2026-06-1
         - "<expected text that only appears when healthy>"
 ```
 
-Pattern after the existing `http_login` (webmail) and `http_jailbeat` (public jailbeat.com) modules. After editing, **reload** blackbox-exporter and Prometheus so they pick up the module/target (check how each is run under `/opt/services/{blackbox-exporter,prometheus}` — typically a container HUP or the `/-/reload` lifecycle endpoint; confirm rather than guess).
+Pattern after the existing `http_login` (webmail) and `http_jailbeat` (public jailbeat.com) modules.
+
+### Reloading after a config edit
+
+Both run as Docker containers under `/opt/services` and **reload config on SIGHUP without restarting** — signal them, don't bounce them:
+
+```bash
+# Prometheus (picks up prometheus.yml — new targets/jobs):
+ssh wanda 'docker compose -f /opt/services/prometheus/docker-compose.yml kill -s HUP prometheus'
+# blackbox-exporter (picks up blackbox.yml — new/changed modules):
+ssh wanda 'docker kill -s HUP blackbox-exporter'
+```
+
+Prometheus also runs with `--web.enable-lifecycle`, so `POST http://127.0.0.1:9090/-/reload` works as an alternative (blackbox exposes the same on :9115). SIGHUP is the simplest and needs no host-port reachability. After reloading, confirm the new probe is live — its target shows `UP` and `probe_success == 1` in Prometheus.
 
 ### SSO-gated content checks
 
