@@ -408,6 +408,12 @@ bind C-o send-prefix
 # Kitty/neovim compatibility
 set -g allow-passthrough all
 set -s set-clipboard on
+# Declare kitty's DECSET 2026 (synchronized output) support so tmux 3.7+ hands
+# sync frames to kitty instead of its own buggy internal buffer. Without this,
+# tmux 3.7's new app-sync handling (PR #4744) collides with async status-line
+# redraws and the status bar paints blank under TUIs like Claude Code that emit
+# ?2026 every frame. Triggered by the 3.6b->3.7 upgrade on 2026-06-26.
+set -as terminal-features ',xterm-kitty:sync'
 
 # Show hostname:command in window titles
 set -g automatic-rename-format '#h:#{pane_current_command}'
