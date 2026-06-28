@@ -32,6 +32,15 @@ Network: `10.0.0.0/24` domain `ericbond.net`. Live host scanner at `https://scan
 
 Execute shell commands via the Bash tool rather than asking the user to run them. They can copy your transcript to reproduce; they shouldn't have to interrupt their flow to dispatch your work.
 
+### Deliver the COMPLETE scope — never stop short or declare "done" prematurely (Dave's order, 2026-06-28, emphatic)
+
+When Dave asks for a "full" / "complete" / "comprehensive" / "overview" / "audit" — or lists several things to look at ("look at X, Y, and Z", "cpu, network, disk…") — that is the WHOLE deliverable, not a menu to sample from. **Enumerate the full scope up front, then complete EVERY item in one pass before reporting.** Do NOT:
+- declare "done" / "we're good" / "call it done" while any requested dimension is still unexamined;
+- ask "want me to continue?" / "should I keep going?" for work that is obviously inside the stated scope;
+- hand over a slice and stop to checkpoint mid-investigation.
+
+Thoroughness is the default. Checkpoints are for genuine forks only — destructive/irreversible actions, security tradeoffs, reboots, or decisions that are Dave's to make — NOT for pausing in the middle of in-scope analysis. For an explicit audit/overview request, the answer to "is this enough?" is **"cover everything, then report."** A "full system perf overview" means CPU (cores, governor, pstate, mitigations, C-states, scheduler, thermal), memory/swap, every disk (model, usage, scheduler, SMART, throughput), network (link, sysctls, ring/coalescing/RPS, throughput to multiple hosts, jumbo, the router), and containers/load — all of it, in one pass.
+
 ### Least privilege on wanda/serp
 
 Use sudo only when required. Prefer 1Password CLI (`op read ...`) over hardcoded secrets anywhere. Before dangerous edits (`/etc/*`, systemd units, nftables, pam), back up the file and diff the change with the user before applying.
