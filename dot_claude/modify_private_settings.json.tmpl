@@ -57,6 +57,9 @@ MANAGED='{
       { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-readd.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/wiki-update-reminder.sh" } ] }{{ end }}
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/hooks/code-review-before-done.sh" } ] }
     ]
   }
 }'

@@ -140,6 +140,18 @@ Mechanics that make it stick:
 
 Origin: 2026-06-11, jailBird PR #87 — a stray script rode a jj snapshot into a PR, failed a CI gate the local set didn't replicate, and a blind command chain merged anyway. Master went red. Dave's verdict: "CI gates should be hard. If the build fails, we do not merge. Stop and solve it."
 
+### A SEPARATE code review is mandatory before "done" (Dave's order, 2026-06-27)
+
+**After writing or modifying code, run a SEPARATE, fresh-eyes code review BEFORE saying the work is done / fixed / ready — every time, no exceptions.** Self-review by the author who wrote the code is NOT sufficient: across this fleet, essentially every time HAL declared "done" and Dave then ran a follow-up review, the review found something real. So the separate pass is now standard process, not optional.
+
+- **"Separate" = a reviewer that did NOT write the code.** Invoke the **`/code-review`** command, or dispatch a reviewer subagent (the `superpowers:requesting-code-review` skill, or a `code-reviewer` agent). In subagent-driven work this is the per-task two-stage review **plus** a final holistic cross-task review.
+- **Address the findings, then finish.** Re-review after any fix that changes code (fix → re-review until clean).
+- Scale the review to the change, but never skip it — even a one-liner gets a fresh-eyes pass.
+
+**Why:** the author's eyes slide past their own assumptions; fresh eyes reliably catch the bug, the missing case, the cross-cutting integration gap. Same epistemics as "observation ≠ inference" — don't self-certify.
+
+**How it's enforced:** the **`code-review-before-done.sh` Stop hook** (fleet-wide, registered in `modify_private_settings.json.tmpl`) scans the session transcript on Stop; if code was edited but no review action ran *after* the last code edit, it BLOCKS finishing with a reminder. Escape hatch (a review genuinely ran but the scan missed it, or a deliberate skip for a specific change): `touch` the marker path named in the block message — but don't reflexively bypass; running the review is the point. (The hook also corrects the stale "Stop can't block" note in the `writing-fleet-hooks` skill — current Claude Code Stop hooks block via `decision: block`.)
+
 ### "Check VK" = a grooming pass, not a status readout (Dave's order, 2026-06-13)
 
 VK = **Vikunja** at projects.ericbond.net. **FIRST load the `using-vikunja` skill** — for ANY VK work, not just "check VK." It has the auth, the Python/urllib helper, the v2.3 quirks (e.g. **`POST /tasks/{id}` replaces the WHOLE task body — GET→mutate→POST or you'll zero the description**; bucket assignment lives in a join table and `?expand=buckets` lies — verify via `GET /projects/{p}/views/{v}/tasks`), and the title/description/label/bucket conventions. Do NOT wing the API from a memory note with curl+jq (that botched a ticket create on 2026-06-13). When Dave says **"check VK"**, do NOT just read the board back: go look at **all** tickets across the relevant project(s) and proactively **GROOM** them — any new/raw ticket gets a proper title (`⚪ #<id> — <title>`), a real description, the right label, correct bucket; flag anything stale, mis-bucketed, done-but-still-open, or missing detail; and surface follow-up tickets the recent work implies. Treat "check VK" as "review and tidy the backlog," then report what you groomed.
