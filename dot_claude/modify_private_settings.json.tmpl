@@ -47,7 +47,8 @@ MANAGED='{
     "PreToolUse": [
       { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/blast-radius.sh" } ] },
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/aur-review.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/aur-review.sh" } ] },
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/npm-install-review.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] },
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-validate.sh" } ] },
