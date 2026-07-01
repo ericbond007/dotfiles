@@ -1,11 +1,13 @@
 ---
 name: writing-fleet-hooks
-description: Use when creating, editing, or registering a Claude Code hook (PreToolUse, PostToolUse, Notification, Stop, SessionStart, SessionEnd, UserPromptSubmit) that needs to be available on some or all of the ericbond.net fleet (flattop, wanda, serp) via chezmoi.
+description: Use when creating, editing, or registering a Claude Code hook (PreToolUse, PostToolUse, Notification, Stop, SessionStart, SessionEnd, UserPromptSubmit) that needs to be available on some or all of the ericbond.net fleet (flattop, wanda, serp, bondo) via chezmoi.
 ---
 
 # Writing Fleet Hooks
 
-Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the shared source so every machine has them on disk; `settings.json.tmpl` registers each one conditionally on hostname. Follow this when adding or changing a hook.
+Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the shared source so every machine has them on disk; `modify_private_settings.json.tmpl` (a chezmoi `modify_` script — it force-owns settings.json's `hooks`+`permissions` keys and leaves runtime keys to Claude Code) registers each one conditionally on hostname. Follow this when adding or changing a hook.
+
+**Bash-guard special case:** the fleet's per-Bash-call guards (blast-radius / AUR review / npm review) are consolidated in the single `bash-guards.sh` dispatcher (2026-07-01). A new guard that matches on Bash commands should be added as another matcher section inside that dispatcher, NOT as a new registration — every separate per-Bash registration costs an extra process spawn + jq parse on every shell command.
 
 ## Where things live
 
@@ -13,7 +15,7 @@ Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the
 |---|---|
 | `~/.claude/hooks/<name>.sh` | Working copy on each host (what Claude Code runs) |
 | `~/.local/share/chezmoi/dot_claude/hooks/executable_<name>.sh` | Chezmoi source (tracked in git) |
-| `~/.local/share/chezmoi/dot_claude/settings.json.tmpl` | Hostname-templated hook registry |
+| `~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl` | Hostname-templated hook registry (modify_ script; owns `hooks`+`permissions`) |
 | `~/.claude/settings.local.json` | Per-host permissions overrides (not chezmoi-tracked) |
 
 ## Hook script contract
@@ -37,15 +39,17 @@ Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the
    ```bash
    echo '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/x"}}' | ~/.claude/hooks/<name>.sh
    ```
-3. **Register in `settings.json.tmpl`.** Shared = top-level entry. Machine-specific = wrap in `{{ if eq .chezmoi.hostname "host" }} ... {{ end }}`.
-4. **Render-check both branches:**
+3. **Register in `modify_private_settings.json.tmpl`.** Shared = top-level entry. Machine-specific = wrap in `{{ if eq .chezmoi.hostname "host" }} ... {{ end }}`. (Bash-command guards: extend `bash-guards.sh` instead — see above.)
+4. **Render-check both branches.** The file is a modify_ SHELL script (not raw JSON), so render what apply would produce:
    ```bash
-   chezmoi execute-template < ~/.local/share/chezmoi/dot_claude/settings.json.tmpl | jq .
-   sed 's/eq .chezmoi.hostname "host"/eq "host" "host"/g' \
-     ~/.local/share/chezmoi/dot_claude/settings.json.tmpl \
-     | chezmoi execute-template | jq .
+   chezmoi cat ~/.claude/settings.json | jq .   # this host's branch
+   # simulate another host's branch (e.g. wanda) against an empty settings file:
+   sed 's/eq .chezmoi.hostname "wanda"/eq "wanda" "wanda"/g' \
+     ~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl \
+     | chezmoi execute-template > /tmp/render-modify.sh
+   echo '{}' | sh /tmp/render-modify.sh | jq .
    ```
-   Both must be valid JSON.
+   Both must emit valid JSON.
 5. **Chezmoi-add the script:**
    ```bash
    chezmoi add ~/.claude/hooks/<name>.sh
@@ -55,7 +59,7 @@ Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the
    ```bash
    chezmoi apply ~/.claude/settings.json
    ```
-7. **Commit + push** in `~/.local/share/chezmoi`. SessionEnd's `chezmoi-sync.sh` will push automatically; if you want to propagate sooner, `ssh <peer> 'chezmoi update'` manually.
+7. **Commit + push** in `~/.local/share/chezmoi`, then run `~/.claude/hooks/chezmoi-sync.sh` (or `/chezmoi-sync`) to push and `chezmoi update` every peer. It is NOT auto-invoked by any hook — sync is a deliberate step.
 
 ## Shared vs machine-specific — decision
 
@@ -105,9 +109,9 @@ The `{{ if ... }},` pattern puts the comma *inside* the conditional so the share
 
 - **Don't `exec 2>>file`** in hooks — Claude can't see warnings then. Use normal stderr.
 - **Don't call `git` from hooks without `-C <path>`** — `cwd` is Claude's, not the chezmoi source.
-- **Don't block (exit 2) from Stop/SessionEnd** — not supported; the session ends regardless.
-- **Don't register a hook for `Bash` that runs long commands** — every shell call pays the cost.
-- **Don't put secrets in settings.json.tmpl** — it's in git. Reference a file (`$(cat /etc/op-...)` pattern) instead.
+- **Stop hooks CAN block** in current Claude Code — emit `{"hookSpecificOutput":{"hookEventName":"Stop","decision":"block","reason":...}}` on stdout + exit 0 (see `code-review-before-done.sh` for the working pattern, including a block-count cap so a session can't wedge). SessionEnd cannot block; the session ends regardless.
+- **Don't register a hook for `Bash` that runs long commands** — every shell call pays the cost. New Bash guards belong inside `bash-guards.sh`, not as new registrations.
+- **Don't put secrets in modify_private_settings.json.tmpl** — it's in git. Reference a file (`$(cat /etc/op-...)` pattern) instead.
 
 ## Verify before relying
 
