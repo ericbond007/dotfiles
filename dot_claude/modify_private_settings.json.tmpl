@@ -46,17 +46,15 @@ MANAGED='{
     ],
     "PreToolUse": [
       { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" } ] },
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/blast-radius.sh" } ] },
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/aur-review.sh" } ] },
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/npm-install-review.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] },
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/bash-guards.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] },
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-validate.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/pre-commit-secrets-scan.sh" } ] }{{ end }}
     ],
     "PostToolUse": [
       { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-readd.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" } ] },
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/wiki-update-reminder.sh" } ] }{{ end }}
     ],
     "Stop": [
@@ -76,16 +74,19 @@ SEED='{
     "playwright@claude-plugins-official": {{ if eq .chezmoi.hostname "flattop" }}false{{ else }}true{{ end }},
     "skill-creator@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
   "effortLevel": "high",
   "editorMode": "vim",
   "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true{{ if eq .chezmoi.hostname "flattop" }},
+  "agentPushNotifEnabled": true,
+  "statusLine": { "type": "command", "command": "node \"$HOME/.claude/hooks/statusline.js\"" }{{ if eq .chezmoi.hostname "flattop" }},
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@latest", "--browser", "chromium", "--executable-path", "/usr/bin/chromium"]
+      "args": ["@playwright/mcp@0.0.77", "--browser=chromium", "--executable-path=/usr/bin/chromium", "--headless"]
     }
   }{{ end }}
 }'

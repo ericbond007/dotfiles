@@ -24,7 +24,13 @@
 #
 # Stop-hook contract (verified current Claude Code): block via
 # {"hookSpecificOutput":{"hookEventName":"Stop","decision":"block","reason":...}}
-# on stdout, exit 0. An 8-block cap + the marker prevent infinite loops.
+# on stdout, exit 0. An 8-block cap (counter file, implemented 2026-07-01 — the
+# original header promised it but never counted) + the marker prevent loops.
+#
+# Accepted residual (documented 2026-07-01 audit): code edited via Bash
+# (`sed -i`, `tee`, heredoc redirection) is invisible to this gate — detecting
+# edit-ness inside arbitrary shell commands is brittle enough to cause false
+# blocks, so we rely on Edit/Write being the overwhelmingly dominant edit path.
 set -u
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -35,22 +41,38 @@ session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
 
 [ -n "$transcript" ] && [ -r "$transcript" ] || exit 0
 
-marker="${TMPDIR:-/tmp}/claude-review-ok-${session:-nosession}"
+# Session key: fall back to the transcript basename so an empty session_id
+# can't collapse every sessionless run onto one shared "-nosession" marker.
+[ -n "$session" ] || session="$(basename "$transcript" .jsonl)"
+
+marker="${TMPDIR:-/tmp}/claude-review-ok-${session}"
 [ -f "$marker" ] && exit 0
+
+# Reap stale markers/counters (tmpfs clears on reboot; this covers long uptimes).
+find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'claude-review-*' -mtime +2 -delete 2>/dev/null || true
+
+# 8-block cap: after 8 blocks in one session, fail open rather than wedge a
+# session that genuinely lacks review tooling.
+counter="${TMPDIR:-/tmp}/claude-review-blocks-${session}"
+blocks="$(cat "$counter" 2>/dev/null || true)"
+case "$blocks" in *[!0-9]*|'') blocks=0 ;; esac
+[ "$blocks" -ge 8 ] && exit 0
 
 # One structural pass. Emits "<last_edit_line> <last_review_line>" (0 if none).
 read -r last_edit last_review < <(
   jq -nr '
     def code_edit($c):
       ($c.type? == "tool_use")
-      and ($c.name? | test("^(Edit|Write|MultiEdit)$"))
-      and (($c.input.file_path? // "")
-           | test("\\.(ts|tsx|js|jsx|mjs|cjs|svelte|vue|py|go|rs|java|rb|php|c|cc|cpp|cxx|h|hpp|cs|swift|kt|kts|scala|lua|pl|pm|sh|bash|zsh|fish|sql|tf)$"));
+      and ($c.name? | test("^(Edit|Write|MultiEdit|NotebookEdit)$"))
+      and (($c.input.file_path? // $c.input.notebook_path? // "")
+           | (test("\\.(ts|tsx|js|jsx|mjs|cjs|svelte|vue|py|go|rs|java|rb|php|c|cc|cpp|cxx|h|hpp|cs|swift|kt|kts|scala|lua|pl|pm|sh|bash|zsh|fish|sql|tf|yaml|yml|nix|zig|ex|exs|ipynb)$")
+              or test("(^|/)(Dockerfile|Makefile|Justfile)[^/]*$")));
     def review($c):
       ($c.type? == "tool_use") and (
         ((($c.name? == "Task") or ($c.name? == "Agent"))
-          and ((($c.input.description? // "") | test("review";"i"))
-               or (($c.input.subagent_type? // "") | test("review";"i"))))
+          and ((($c.input.subagent_type? // "") | test("review";"i"))
+               or (($c.input.description? // "")
+                   | test("code.?review|review.*(code|diff|change|pr|fix|implementation|hook|script)|fresh.?eyes";"i"))))
         or (($c.name? == "Skill")
             and (($c.input.skill? // $c.input.command? // "") | test("code-review|requesting-code-review|security-review";"i")))
         or (($c.name? == "SlashCommand")
@@ -77,6 +99,7 @@ case "${last_edit}${last_review}" in *[!0-9]*) exit 0 ;; esac
 
 reason="STANDING ORDER (Dave, fleet-wide): code was written or modified this session, but no SEPARATE code review has run after the last code change. Before finishing, run a fresh-eyes review that did NOT write the code — invoke the /code-review command, or dispatch a reviewer subagent (e.g. the superpowers:requesting-code-review skill or a code-reviewer agent) — and address its findings. Then finish. Re-review after any fix that changes code. If you GENUINELY already ran a separate review this session and this check missed it (or you have a real reason to skip for this specific change), override with:  touch '${marker}'"
 
+echo $((blocks + 1)) > "$counter" 2>/dev/null || true
 jq -nc --arg r "$reason" \
   '{hookSpecificOutput:{hookEventName:"Stop",decision:"block",reason:$r}}'
 exit 0
