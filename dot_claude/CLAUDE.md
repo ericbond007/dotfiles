@@ -42,6 +42,14 @@ When Dave asks for a "full" / "complete" / "comprehensive" / "overview" / "audit
 
 Thoroughness is the default. Checkpoints are for genuine forks only — destructive/irreversible actions, security tradeoffs, reboots, or decisions that are Dave's to make — NOT for pausing in the middle of in-scope analysis. For an explicit audit/overview request, the answer to "is this enough?" is **"cover everything, then report."** A "full system perf overview" means CPU (cores, governor, pstate, mitigations, C-states, scheduler, thermal), memory/swap, every disk (model, usage, scheduler, SMART, throughput), network (link, sysctls, ring/coalescing/RPS, throughput to multiple hosts, jumbo, the router), and containers/load — all of it, in one pass.
 
+### Cross-project interaction rules (promoted from project memories, 2026-07-02)
+
+These kept getting independently re-learned per project; they are Dave-wide:
+
+- **Quick-captures are DO-it asks.** "Merge those" / "clean up X" / "fix that" = perform the operation now, narrating as you go; offer tooling/automation afterward, not instead.
+- **Show docs/specs INLINE in chat.** When Dave asks for a spec/plan/list, paste the content in the message — don't just commit it to a branch or file he can't see from the conversation.
+- **Subagent model floor: Sonnet.** Reviewers and judgment-heavy passes get Opus or better. Never Haiku, even for mechanical work — Dave has said this more than once.
+
 ### Least privilege on wanda/serp
 
 Use sudo only when required. Prefer 1Password CLI (`op read ...`) over hardcoded secrets anywhere. Before dangerous edits (`/etc/*`, systemd units, nftables, pam), back up the file and diff the change with the user before applying.
@@ -141,7 +149,8 @@ Why: on jail.ericbond.net, `npm run typecheck` was silently broken for an unknow
 
 Mechanics that make it stick:
 
-- **Never sequence `gh pr merge` (or any merge) unconditionally after a checks-watch** in a command chain. The merge must be mechanically conditional on the verified GREEN outcome (check the watch's exit status / parse its conclusion), or run as a separate step after reading the checks yourself. A chain that merges regardless of the watch's verdict is the bug that caused this rule.
+- **Never sequence `gh pr merge` (or any merge) unconditionally after a checks-watch** in a command chain.
+- **Pipefail on gate pipelines.** `lint | tail` (or any gate piped through a filter) masks the gate's failure even under `set -e` — use `set -o pipefail` or check `PIPESTATUS`. The pipeline's exit code IS the gate. The merge must be mechanically conditional on the verified GREEN outcome (check the watch's exit status / parse its conclusion), or run as a separate step after reading the checks yourself. A chain that merges regardless of the watch's verdict is the bug that caused this rule.
 - **Run the FULL CI gate set locally before opening a PR** — every command CI runs, not just the convenient ones. If CI runs a gate the local set doesn't (`tsc -p` on a secondary tsconfig, a lint over an extra dir), add it to the local set the moment you discover it.
 - **If a red check looks like flaky infra, prove it**: re-run the check and watch it go green BEFORE merging. "Looked transient" is not green.
 - **Verify the working set before branching/bookmarking** — with jj especially, the working copy snapshot carries stray files into the PR. `jj diff --summary` must list exactly the intended files.
