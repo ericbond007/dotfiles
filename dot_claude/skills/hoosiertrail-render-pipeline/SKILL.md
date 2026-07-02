@@ -190,6 +190,29 @@ The painted-style landscape backdrops come from SDXL + a custom LoRA `ht_landsca
 
 - **Output usage:** rendered tiles go to `static/wagon-bg/backdrops/*`. `BackdropPainting.svelte` is the default backdrop renderer in `WagonScene.svelte`.
 
+### What the pipeline can and CANNOT render (category rule, proven 2026-05-27)
+
+`ht_landscape` + SDXL only works for **natural-landscape landmarks** (rock formations, rivers, plains, springs — chimney_rock and scotts_bluff validated). **Architecture is broken with this pipeline**: 29 iterations on Fort Laramie proved the LoRA pulls buildings into far-horizon landscape compositions, SDXL tiles/duplicates content at 3:1 aspect (rows of identical buildings), and multi-building prompts collapse to one cartoonish building even at 3:2. Best fort result ever achieved = a single Old-Bedlam-style building (v23/seed 830020), shipped as a stopgap.
+
+- Check natural vs man-made BEFORE spending iteration budget. Man-made (forts, missions, ranches, trading posts) → **wait for #1187** (architectural pipeline: RealVisXL/DreamShaper + 3:2 + outpainting) or accept a single-building stopgap. Hybrid/unsure → ask Dave.
+
+### Fort composition rule (applies to any architecture pipeline, Dave 2026-05-27)
+
+When a backdrop depicts a fort/man-made landmark: **1–3 prominent buildings** (never a sprawl/town); **exactly one flagpole + one American flag** (stack anti-multi-flag negatives: `multiple flagpoles, multiple flags, two flags, many flagpoles, flag cluster, row of flags`); **teepees in the far foreground separated from the fort by ≥100 yards of explicit open prairie** (else the model amalgamates them into one cluster — use spatial language verbatim); **minimal horses/wagons/people** (`a single small covered wagon with one ox team`, anti-crowd negatives: `many horses, herd of horses, cavalry, mounted soldiers, dozens of people, crowd, busy scene, large wagon train, dozens of wagons`). The dialed-in v8 Fort Laramie prompt in the archive (`~/projects/aiImprove/memory-archive-2026-07-02/`, feedback_fort_composition_rule) is the template to mirror for the next fort.
+
+### Retraining the ht_landscape LoRA (kohya-sd-scripts)
+
+The LoRA was trained with **`~/projects/kohya-sd-scripts/`** (clone of github.com/kohya-ss/sd-scripts, `.venv` inside, ~5 GB; dormant since 2026-05-01) on the data at `~/datasets/ot-revisited/lora-train/`.
+
+**⚠️ Load-bearing local patch (committed locally 2026-07-02, NOT upstream):** `library/sdxl_model_util.py` loads both text encoders in **fp16 instead of fp32** — without it, TE loading OOMs during init on flattop's 8 GB RTX 3070 (the TE2 step). Quality loss is negligible because `cache_text_encoder_outputs` uses the TEs once to pre-compute embeddings, then unloads. If the clone is ever updated/re-cloned, **re-apply this patch before training** (it's a local commit on the clone's main; `git log --oneline -1` there shows it).
+
+## Draft-animal models: sourcing, provenance, rigging
+
+- **`ox-walk.glb` provenance** (recorded nowhere else): Sketchfab **"Double Ox walk" by honved444, CC-BY-4.0**, pre-rigged + walk-animated (action `Ox_ walk_draft`); attribution metadata lives only in the GLB's `asset.extras`. The donkey (soniarocha, 12 actions incl. walk) is likewise pre-rigged+animated.
+- **The sourcing path for any new draft animal:** free, CC-licensed, **pre-rigged AND pre-animated** quadruped GLB on Sketchfab → render its built-in action via `tools/blender/render_animation.py` → union-bbox crop. Dave's rules: never pay, CC-BY fine (attribution only), reject copyrighted characters. Sketchfab downloads need a logged-in browser (Dave does that step).
+- **⚠️ Headless auto-rigging a STATIC mesh does not work** (proven on #216, 2026-05-28): a mesh sculpted mid-gallop can't be reposed headless (it "leaps in place"); non-watertight meshes fail heat/auto-weights and envelope weights only flail loose parts. Pre-rigged+animated or nothing — a human authored the walk in a viewport, and that can't be reproduced with `blender -b`. Corollary: **verify motion by viewing the render, never by pixel-diff numbers** (the "walking" pixels were flailing bridle reins).
+- **Mule status:** no mule GLB — mule teams currently render AS OXEN because `OxTeam.svelte`'s Blender branch (`useBlenderTeam:true`) ignores `isMule` (the flag only steered the dormant SVG fallback). Working path: mule-ify the walking donkey (longer ears, roached mane, reskin via `stylize.py`, scale up) or base on "Low Poly Horse (Rigged)" by Yanez Designs (CC-BY-4.0); harness as SVG overlay, no yoke.
+
 ## SVG generation paths (beyond hand-authored)
 
 When hand-authored SVG hits its ceiling (complex landmarks, signage, etc.):

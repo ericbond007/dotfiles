@@ -30,7 +30,7 @@ If a repo has its own jj notes in its `CLAUDE.md` (e.g. project-specific bookmar
 | Describe the working copy | `jj describe -m "feat(x): ..."` |
 | Move a bookmark to current change | `jj bookmark set <name> -r @` (`--allow-backwards` to go back) |
 | Create a bookmark | `jj bookmark create <name> -r @` |
-| Push a bookmark | `jj git push --bookmark <name>` (`--allow-new` on first push of a rebased state) |
+| Push a bookmark | `jj git push --bookmark <name>` — new bookmarks push by default on the fleet's jj 0.40; there is NO `--allow-new` flag (it errors with "unexpected argument") |
 | Fetch | `jj git fetch` |
 | Rebase a branch onto another | `jj rebase -b <bookmark> -d <dest>` |
 | Undo anything | `jj op log` then `jj op restore <op-id>` |
@@ -88,7 +88,7 @@ jj git fetch
 jj new master
 jj describe -m "feat(x): start"
 jj bookmark create feat/x -r @
-jj git push --bookmark feat/x --allow-new
+jj git push --bookmark feat/x
 # ...edit (auto-snapshotted)... then describe the real message + jj new
 ```
 
