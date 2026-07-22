@@ -366,6 +366,7 @@ print([p for p in spec['paths'] if 'label' in p])
 - **The `priority` field uses 1-5 (1=lowest, 5=highest).** Frontend renders ⚪ low (1) / 🟡 mid (2-3) / 🔴 high (4-5).
 - **Views are project-scoped.** A custom View only filters tickets in its own project; parent projects do NOT aggregate child-project tasks into their Views. Cross-project group tabs therefore render incompletely — unify the cluster into one project first.
 - **In migrated projects, the `#N` in a title may NOT be the global task `id`.** If a project was imported (e.g. from a TODO.md), titles often kept the old display numbers while Vikunja assigned fresh global ids — and those display numbers can collide with *other* projects' global ids. Never `GET/POST/relate /tasks/<displayN>`; always resolve the real global `id` from the project task listing first.
+- **`task_buckets` can hold duplicate rows for one task, and the API can't remove them.** A task can appear twice in a kanban column (seen jailBird view 31, 2026-07-21). Re-POSTing the bucket assignment — even bouncing through another bucket — replaces only one row; the spec has no row-level DELETE (`.../buckets/{b}/tasks` is POST-only). Cosmetic; the real fix is SQL on the wanda Vikunja DB (`DELETE` the stray `task_buckets` row).
 
 ## When to invoke this skill
 
