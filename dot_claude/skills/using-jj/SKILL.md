@@ -54,12 +54,16 @@ cd ../<repo>-<task-name>
 # edit, run dev/verify, push, PR — each workspace has its own @
 ```
 
-Cleanup when the branch lands:
+Cleanup when the branch lands — all four steps, not just the first two. Squash-merge means the branch's commits never become ancestors of trunk, so jj shows the stack as visible heads *forever* until someone abandons it; skipping this is how a repo accumulates hundreds of orphaned changes and dozens of dead remote branches (jailBird, audited 2026-07-21: 201 stale changes, 67 dead remote branches):
 
 ```bash
 jj workspace forget <task-name>
 rm -rf ../<repo>-<task-name>
+jj bookmark delete <feat-bookmark>       # or `jj bookmark forget` to leave the remote alone
+jj abandon -r '::<old-head> ~ ::master'  # the squash-merged stack — reversible via jj op log
 ```
+
+The remote branch: prefer enabling GitHub's **auto-delete on merge** per repo (`gh api -X PATCH repos/<o>/<r> -f delete_branch_on_merge=true` — done for jailBird 2026-07-21); otherwise `gh pr merge --squash --delete-branch`.
 
 Do **not** use the Agent tool's `isolation: "worktree"` flag for this — it forks from the wrong commit. Use a real `jj workspace`.
 
