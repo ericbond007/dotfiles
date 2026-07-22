@@ -1,0 +1,14 @@
+#!/bin/sh
+# Co-manage ~/.codex/config.toml without overwriting Codex-managed settings.
+# Codex updates project trust and TUI state at runtime, so only enforce the
+# external notification command here.
+set -eu
+
+config=$(cat)
+
+printf '%s\n' 'notify = ["/home/eric/.codex/notify-tmux.sh"]'
+printf '%s\n' "$config" | awk '
+    BEGIN { in_root = 1 }
+    /^[[:space:]]*\[/ { in_root = 0 }
+    !(in_root && $0 ~ /^[[:space:]]*notify[[:space:]]*=/)
+'
