@@ -59,8 +59,11 @@ Cleanup when the branch lands — all four steps, not just the first two. Squash
 ```bash
 jj workspace forget <task-name>
 rm -rf ../<repo>-<task-name>
-jj bookmark delete <feat-bookmark>       # or `jj bookmark forget` to leave the remote alone
-jj abandon -r '::<old-head> ~ ::master'  # the squash-merged stack — reversible via jj op log
+jj abandon -r '::<feat-bookmark> ~ ::master'  # the squash-merged stack — reversible via jj op log
+# abandon FIRST, while the bookmark still resolves; it also drops bookmarks
+# pointing at abandoned commits. Assumes a single stack off master — if the
+# branch was stacked on another un-merged branch, narrow the revset.
+jj bookmark delete <feat-bookmark>       # only if it survived; `jj bookmark forget` to leave the remote alone
 ```
 
 The remote branch: prefer enabling GitHub's **auto-delete on merge** per repo (`gh api -X PATCH repos/<o>/<r> -f delete_branch_on_merge=true` — done for jailBird 2026-07-21); otherwise `gh pr merge --squash --delete-branch`.
