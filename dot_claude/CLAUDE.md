@@ -221,7 +221,7 @@ The routine edit→sync flow is handled by the `chezmoi-readd` PostToolUse hook 
 
 Codex's deterministic global entry point is `~/.codex/AGENTS.md`; its co-managed config enables generated local memories and treats `CLAUDE.md` as the project-instruction fallback when no `AGENTS.md` exists. Required fleet/project knowledge still belongs in synced guidance, repo docs, skills, or the wiki — Codex generated memory is a secondary per-host recall layer, not the source of truth.
 
-The **chezmoi `dot_claude/skills` tree is canonical**. Claude gets rendered working copies under `~/.claude/skills/`; Codex's `~/.codex/skills/<name>` entries symlink directly to the chezmoi source, so Codex-only hosts still work and the assistants never copy-fork a skill. The newer reusable Vikunja client lives in that shared tree. Codex's `~/.codex/hooks.json` registers the same `bash-guards.sh` dispatcher; this Bash hook protocol was verified compatible on Codex 0.145. Transcript/edit-shape-dependent hooks are not assumed compatible — see `writing-fleet-hooks`.
+The **chezmoi `dot_claude/skills` tree is canonical**. Claude gets rendered working copies under `~/.claude/skills/`; Codex's `~/.codex/skills/<name>` entries symlink directly to the chezmoi source, so Codex-only hosts still work and the assistants never copy-fork a skill. The newer reusable Vikunja client lives in that shared tree. Codex's `~/.codex/hooks.json` invokes the same canonical `bash-guards.sh` source through Bash, so it also works when a host deliberately ignores rendered Claude targets; this Bash hook protocol was verified compatible on Codex 0.145. Transcript/edit-shape-dependent hooks are not assumed compatible — see `writing-fleet-hooks`.
 
 ## Memory vs this file
 

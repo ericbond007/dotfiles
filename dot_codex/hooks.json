@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/eric/.claude/hooks/bash-guards.sh",
+            "command": "bash /home/eric/.local/share/chezmoi/dot_claude/hooks/executable_bash-guards.sh",
             "timeout": 15,
             "statusMessage": "Checking fleet shell safety policy"
           }

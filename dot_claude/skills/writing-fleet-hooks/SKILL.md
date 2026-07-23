@@ -18,7 +18,7 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 | `~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl` | Hostname-templated hook registry (modify_ script; owns `hooks`+`permissions`) |
 | `~/.claude/settings.local.json` | Per-host permissions overrides (not chezmoi-tracked) |
 | `~/.codex/hooks.json` | Codex hook registry working copy |
-| `~/.local/share/chezmoi/dot_codex/hooks.json` | Codex hook registry source |
+| `~/.local/share/chezmoi/dot_codex/hooks.json` | Codex hook registry source; shared scripts must not assume rendered Claude targets exist |
 
 ## Hook script contract
 
@@ -80,7 +80,11 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 If the hook is also Codex-compatible:
 
 8. Register it in `dot_codex/hooks.json`, apply `~/.codex/hooks.json`, then open
-   Codex `/hooks`, review, and trust the new hash.
+   Codex `/hooks`, review, and trust the new hash. A Codex-compatible shared
+   script must also work on Codex-only hosts: invoke the canonical
+   `dot_claude/hooks/executable_<name>.sh` source through Bash, or create a
+   Codex-managed executable target. Do not point at `~/.claude/hooks/<name>.sh`
+   unless Claude targets are guaranteed present on every intended host.
 9. Run an isolated trigger through a normal Codex session (no hook-trust
    bypass) and prove the expected pass/block behavior.
 
