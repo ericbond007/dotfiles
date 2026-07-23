@@ -21,7 +21,7 @@ The fleet (flattop/wanda/serp/bondo, plus balganor and living-pi as Claude-Code-
 | `~/.codex/AGENTS.md` | compact global Codex routing/policy; points into the canonical Claude policy, skills, repos, and wiki |
 | `~/.codex/config.toml` | co-managed by `dot_codex/modify_private_config.toml`; fleet defaults plus Codex-owned trust/TUI state |
 | `~/.codex/hooks.json` | Codex lifecycle registry; currently shares the fleet Bash guard |
-| `~/.codex/skills/<name>` | chezmoi-managed symlinks to canonical `~/.claude/skills/<name>` directories |
+| `~/.codex/skills/<name>` | symlinks directly to canonical `~/.local/share/chezmoi/dot_claude/skills/<name>`; works even when Claude targets are ignored |
 | `~/.codex/memories*` | generated per-host Codex recall state — **not** chezmoi-tracked and never required guidance |
 
 ## Hooks that make it work
