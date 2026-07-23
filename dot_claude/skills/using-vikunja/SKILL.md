@@ -5,45 +5,72 @@ description: Use when Dave mentions "vk", "vikunja", "ticket(s)", "the tracker",
 
 # Using Vikunja
 
-Vikunja is Dave's self-hosted project tracker at **https://projects.ericbond.net**. Source of truth for every project. Per-project IDs (project, view, bucket, label) live in the project's memory dir; this skill captures the API patterns, v2.3 quirks, and conventions that apply across every project.
+Vikunja is Dave's self-hosted project tracker at **https://projects.ericbond.net**. Source of truth for every project. This skill bundles a reusable client and captures the conventions that apply across every project. A project only needs to record its project ID; the client discovers kanban views and buckets.
 
-## Auth — never plaintext
+## Use the bundled client first
 
 ```bash
-VIKUNJA_TOKEN=$(op read "op://vault.ericbond.net/<vault-item>/password")
+VK="node <skill-dir>/scripts/vikunja.mjs"
+
+$VK list --project 6
+$VK audit --project 6 --repo /path/to/repo --rev master
+$VK get 1514
+$VK buckets --project 6
 ```
 
-The vault item is project-specific (e.g. `projects api key`). Per-project memory should record the vault path. **Never** hardcode the token; never write it to disk.
+Do not write a fresh curl/Python/Node helper for routine Vikunja work. Use
+`scripts/vikunja.mjs`; it already handles pagination, 1Password authentication,
+full-body task updates, title formatting, view/bucket discovery, and empty DELETE
+responses.
 
-Header: `Authorization: Bearer $VIKUNJA_TOKEN` on every request. API base: `https://projects.ericbond.net/api/v1`.
+Read-only commands:
 
-## Pattern: a Python helper for every script
-
-Inline-Python via `python3` heredoc beats curl+jq for anything multi-step. stdlib only — `urllib.request` + `json`. No third-party deps.
-
-```python
-VIKUNJA_TOKEN=$(op read "op://vault.ericbond.net/projects api key/password") python3 <<'PY'
-import os, json, urllib.request
-H = {"Authorization": f"Bearer {os.environ['VIKUNJA_TOKEN']}", "Content-Type": "application/json"}
-def http(method, path, body=None):
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(f"https://projects.ericbond.net/api/v1{path}",
-                                 data=data, headers=H, method=method)
-    return json.loads(urllib.request.urlopen(req).read())
-
-# ... your operations ...
-PY
+```bash
+$VK list --project <id> [--all] [--json]
+$VK audit --project <id> [--all] [--repo <path>] [--rev master] [--json]
+$VK get <task-id> [task-id...]
+$VK views --project <id>
+$VK buckets --project <id> [--view <id>]
 ```
 
-For DELETE that returns no JSON: `urllib.request.urlopen(req).read()` (skip `json.loads`).
+Mutation commands:
 
-For Bash heredocs with embedded JSON: encode the JSON via `python3 -c` or `jq -n` rather than inline strings — newlines + quoting break shell heredoc passthrough. Prefer the all-Python approach.
+```bash
+$VK create --project <id> --severity low --title "..." --description "..."
+$VK edit <task-id> --severity medium --title "..." --description "..."
+$VK severity <task-id> [task-id...] --severity backlog
+$VK move <task-id> --project <id> --bucket todo|doing|done
+$VK start <task-id> --project <id> [--comment "..."]
+$VK done <task-id> --project <id> [--comment "..."]
+$VK comment <task-id> --text "..."
+$VK label-add <task-id> --label <label-id>
+$VK label-remove <task-id> --label <label-id>
+$VK relate <parent-id> <child-id> --kind subtask
+```
+
+Run the script with `--help` for the complete syntax. Pass `--view` only when a
+project has multiple kanban views. Bucket names accept the common aliases
+To-Do/Backlog/Open, Doing/In Progress/Active, and Done/Shipped/Closed.
+Run `self-test` after modifying the client, then validate the skill directory.
+
+## Authentication and API fallback
+
+The client reads the token directly into process memory from
+`op://vault.ericbond.net/projects api key/password`. Override the secret
+reference with `VIKUNJA_TOKEN_REF` for a project using a different vault item,
+or the API root with `VIKUNJA_API_BASE`. Never put tokens in command arguments,
+logs, or files.
+
+Use direct API code only when the bundled client genuinely lacks an operation.
+When extending the client would make that operation reusable, extend and test
+the client instead of leaving a one-off helper behind.
 
 ## v2.3 quirks (the gotchas that bit me on hoosierTrail)
 
 ### POST /tasks/{id} replaces the entire task body
 
-`POST /tasks/{id}` with `{priority: 2}` silently zeros every other field not in the body (done, title, labels, etc.). To preserve fields, **GET → mutate → POST whole**:
+`POST /tasks/{id}` with `{priority: 2}` can reset fields omitted from the body.
+Always preserve fields with **GET → mutate → POST whole**:
 
 ```python
 t = http("GET", f"/tasks/{tid}")
@@ -52,7 +79,7 @@ t['done'] = True
 http("POST", f"/tasks/{tid}", t)
 ```
 
-Single-field flips (just `{done: true}`) work because the done-bucket auto-move triggers cleanly on done-flip and other fields aren't part of the diff intent. But priority + title + labels all reset — so always full-body for anything beyond a single boolean.
+Do this even for a one-field change. The bundled client does it automatically.
 
 ### Bucket assignment lives in a join table, not on the task
 
@@ -75,7 +102,9 @@ POSTing to a different bucket replaces the existing assignment automatically (wi
 A task moved to a different project needs both `project_id` updated AND a fresh bucket assignment (the old bucket belongs to the old project's view):
 
 ```python
-http("POST", f"/tasks/{tid}", {"project_id": NEW_PROJECT})
+t = http("GET", f"/tasks/{tid}")
+t["project_id"] = NEW_PROJECT
+http("POST", f"/tasks/{tid}", t)
 http("POST", f"/projects/{NEW_PROJECT}/views/{NEW_VIEW}/buckets/{NEW_BUCKET}/tasks",
      {"task_id": tid, "project_view_id": NEW_VIEW, "bucket_id": NEW_BUCKET})
 ```
@@ -366,7 +395,6 @@ print([p for p in spec['paths'] if 'label' in p])
 - **The `priority` field uses 1-5 (1=lowest, 5=highest).** Frontend renders ⚪ low (1) / 🟡 mid (2-3) / 🔴 high (4-5).
 - **Views are project-scoped.** A custom View only filters tickets in its own project; parent projects do NOT aggregate child-project tasks into their Views. Cross-project group tabs therefore render incompletely — unify the cluster into one project first.
 - **In migrated projects, the `#N` in a title may NOT be the global task `id`.** If a project was imported (e.g. from a TODO.md), titles often kept the old display numbers while Vikunja assigned fresh global ids — and those display numbers can collide with *other* projects' global ids. Never `GET/POST/relate /tasks/<displayN>`; always resolve the real global `id` from the project task listing first.
-- **`task_buckets` can hold duplicate rows for one task, and the API can't remove them.** A task can appear twice in a kanban column (seen jailBird view 31, 2026-07-21). Re-POSTing the bucket assignment — even bouncing through another bucket — replaces only one row; the spec has no row-level DELETE (`.../buckets/{b}/tasks` is POST-only). Cosmetic; the real fix is SQL on the wanda Vikunja DB (`DELETE` the stray `task_buckets` row).
 
 ## When to invoke this skill
 

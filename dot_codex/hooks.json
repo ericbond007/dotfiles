@@ -1,0 +1,18 @@
+{
+  "description": "Shared fleet safety hooks for Codex.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/eric/.claude/hooks/bash-guards.sh",
+            "timeout": 15,
+            "statusMessage": "Checking fleet shell safety policy"
+          }
+        ]
+      }
+    ]
+  }
+}

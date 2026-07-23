@@ -1,11 +1,11 @@
 ---
 name: writing-fleet-hooks
-description: Use when creating, editing, or registering a Claude Code hook (PreToolUse, PostToolUse, Notification, Stop, SessionStart, SessionEnd, UserPromptSubmit) that needs to be available on some or all of the ericbond.net fleet (flattop, wanda, serp, bondo) via chezmoi.
+description: Use when creating, editing, registering, or sharing a Claude Code or Codex lifecycle hook (PreToolUse, PermissionRequest, PostToolUse, Notification, Stop, SessionStart, SessionEnd, UserPromptSubmit) across some or all of the ericbond.net fleet via chezmoi. Covers the shared Bash-guard path and the compatibility boundaries that prevent blindly reusing transcript- or edit-shape-dependent hooks.
 ---
 
 # Writing Fleet Hooks
 
-Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the shared source so every machine has them on disk; `modify_private_settings.json.tmpl` (a chezmoi `modify_` script — it force-owns settings.json's `hooks`+`permissions` keys and leaves runtime keys to Claude Code) registers each one conditionally on hostname. Follow this when adding or changing a hook.
+Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts live in the shared Claude source so every machine has them on disk. Claude's `modify_private_settings.json.tmpl` registers hooks conditionally by hostname; Codex uses `dot_codex/hooks.json`. Follow this when adding or changing a hook.
 
 **Bash-guard special case:** the fleet's per-Bash-call guards (blast-radius / AUR review / npm review) are consolidated in the single `bash-guards.sh` dispatcher (2026-07-01). A new guard that matches on Bash commands should be added as another matcher section inside that dispatcher, NOT as a new registration — every separate per-Bash registration costs an extra process spawn + jq parse on every shell command.
 
@@ -17,6 +17,8 @@ Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the
 | `~/.local/share/chezmoi/dot_claude/hooks/executable_<name>.sh` | Chezmoi source (tracked in git) |
 | `~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl` | Hostname-templated hook registry (modify_ script; owns `hooks`+`permissions`) |
 | `~/.claude/settings.local.json` | Per-host permissions overrides (not chezmoi-tracked) |
+| `~/.codex/hooks.json` | Codex hook registry working copy |
+| `~/.local/share/chezmoi/dot_codex/hooks.json` | Codex hook registry source |
 
 ## Hook script contract
 
@@ -31,6 +33,20 @@ Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the
 - **Output:** stderr goes to Claude's context; stdout is mostly ignored except PostToolUse where it's appended
 - **Early exit:** check `tool_name` / `file_path` / `command` up top and exit 0 fast when not applicable
 - **Never `set -e` without `set -u`** and always trap broken deps with `|| true` for side-effect calls that can legitimately fail
+
+### Codex compatibility boundary
+
+- Codex 0.145 sends the same `tool_name`, `tool_input.command`, `cwd`,
+  `session_id`, and `transcript_path` fields for `PreToolUse(Bash)`. Exit 2
+  blocks before execution. The shared `bash-guards.sh` is verified on both.
+- Codex requires explicit hash-bound trust for non-managed hooks. After every
+  registry or command change, open `/hooks`, review the exact command, and trust
+  it; verify without `--dangerously-bypass-hook-trust`.
+- Do **not** assume other hooks are portable. Codex file writes normally arrive
+  as `apply_patch`, not Claude's `Edit`/`Write` `file_path` shape, and transcript
+  JSONL is not a stable cross-product format. `chezmoi-preflight.sh`,
+  `chezmoi-readd.sh`, and `code-review-before-done.sh` therefore remain
+  Claude-only until they gain and pass explicit Codex adapters/tests.
 
 ## Authoring checklist
 
@@ -60,6 +76,13 @@ Claude Code hooks on this fleet are managed through chezmoi. Scripts live in the
    chezmoi apply ~/.claude/settings.json
    ```
 7. **Commit + push** in `~/.local/share/chezmoi`, then run `~/.claude/hooks/chezmoi-sync.sh` (or `/chezmoi-sync`) to push and `chezmoi update` every peer. It is NOT auto-invoked by any hook — sync is a deliberate step.
+
+If the hook is also Codex-compatible:
+
+8. Register it in `dot_codex/hooks.json`, apply `~/.codex/hooks.json`, then open
+   Codex `/hooks`, review, and trust the new hash.
+9. Run an isolated trigger through a normal Codex session (no hook-trust
+   bypass) and prove the expected pass/block behavior.
 
 ## Shared vs machine-specific — decision
 
@@ -112,6 +135,9 @@ The `{{ if ... }},` pattern puts the comma *inside* the conditional so the share
 - **Stop hooks CAN block** in current Claude Code — emit `{"hookSpecificOutput":{"hookEventName":"Stop","decision":"block","reason":...}}` on stdout + exit 0 (see `code-review-before-done.sh` for the working pattern, including a block-count cap so a session can't wedge). SessionEnd cannot block; the session ends regardless.
 - **Don't register a hook for `Bash` that runs long commands** — every shell call pays the cost. New Bash guards belong inside `bash-guards.sh`, not as new registrations.
 - **Don't put secrets in modify_private_settings.json.tmpl** — it's in git. Reference a file (`$(cat /etc/op-...)` pattern) instead.
+- **Don't reuse Claude edit or Stop hooks in Codex just because the event names
+  match.** Capture and compare the real payload first; transcript formats and
+  tool argument shapes differ.
 
 ## Verify before relying
 
@@ -122,3 +148,6 @@ ssh <host> 'jq ".hooks | to_entries | map({event: .key, count: (.value | length)
 ```
 
 Counts should match the shared+host-specific sum you expect.
+
+For Codex, open `/hooks` and confirm the expected Installed and Active counts,
+then run the hook's safe trigger without a trust bypass.

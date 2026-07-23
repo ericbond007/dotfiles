@@ -1,0 +1,4 @@
+interface:
+  display_name: "Using Vikunja"
+  short_description: "Safely manage Dave’s Vikunja project tasks"
+  default_prompt: "Use $using-vikunja to inspect or update the relevant Vikunja tasks safely."

@@ -173,7 +173,7 @@ Origin: 2026-06-11, jailBird PR #87 — a stray script rode a jj snapshot into a
 
 ### "Check VK" = a grooming pass, not a status readout (Dave's order, 2026-06-13)
 
-VK = **Vikunja** at projects.ericbond.net. **FIRST load the `using-vikunja` skill** — for ANY VK work, not just "check VK." It has the auth, the Python/urllib helper, the v2.3 quirks (e.g. **`POST /tasks/{id}` replaces the WHOLE task body — GET→mutate→POST or you'll zero the description**; bucket assignment lives in a join table and `?expand=buckets` lies — verify via `GET /projects/{p}/views/{v}/tasks`), and the title/description/label/bucket conventions. Do NOT wing the API from a memory note with curl+jq (that botched a ticket create on 2026-06-13). When Dave says **"check VK"**, do NOT just read the board back: go look at **all** tickets across the relevant project(s) and proactively **GROOM** them — any new/raw ticket gets a proper title (`⚪ #<id> — <title>`), a real description, the right label, correct bucket; flag anything stale, mis-bucketed, done-but-still-open, or missing detail; and surface follow-up tickets the recent work implies. Treat "check VK" as "review and tidy the backlog," then report what you groomed.
+VK = **Vikunja** at projects.ericbond.net. **FIRST load the `using-vikunja` skill** — for ANY VK work, not just "check VK." It bundles the canonical client (`scripts/vikunja.mjs`) with auth, pagination, safe full-body task updates, view/bucket discovery, the v2.3 quirks, and title/description/label/bucket conventions. Use that client; do NOT wing the API from a memory note with curl, jq, or a fresh helper (that botched a ticket create on 2026-06-13). When Dave says **"check VK"**, do NOT just read the board back: go look at **all** tickets across the relevant project(s) and proactively **GROOM** them — any new/raw ticket gets a proper title (`⚪ #<id> — <title>`), a real description, the right label, correct bucket; flag anything stale, mis-bucketed, done-but-still-open, or missing detail; and surface follow-up tickets the recent work implies. Treat "check VK" as "review and tidy the backlog," then report what you groomed.
 
 ### "Check your memory" = re-read this CLAUDE.md (Dave's order, 2026-06-13)
 
@@ -216,6 +216,12 @@ There's a substantial MkDocs **ops wiki on wanda at `/opt/services/wiki`** (serv
 flattop/wanda/serp/bondo (+ balganor/living-pi as Claude-Code-less peers) share config via **chezmoi** with **GitHub** (`ericbond007/dotfiles`, `origin/master`) as the hub — edit on one host, propagate everywhere. Source tree: `~/.local/share/chezmoi/`. Tracked: `~/.claude/{hooks,skills,commands,agents,CLAUDE.md}` + `settings.json` (co-managed via the `modify_private_settings.json.tmpl` modify-script: chezmoi owns `hooks`+`permissions`, Claude Code owns the runtime keys). NOT tracked, per-host: `settings.local.json`, `projects/.../memory/`.
 
 The routine edit→sync flow is handled by the `chezmoi-readd` PostToolUse hook + the **`chezmoi-sync`** skill/command (refuses on a dirty tree, pushes, then `chezmoi update` on each peer). Adding or changing a hook → **`writing-fleet-hooks`** skill. The full topology reference — what-lives-where table, the sync/notify hooks, and onboarding a new host — is in the **`fleet-sync-architecture`** skill.
+
+### Claude + Codex coexistence
+
+Codex's deterministic global entry point is `~/.codex/AGENTS.md`; its co-managed config enables generated local memories and treats `CLAUDE.md` as the project-instruction fallback when no `AGENTS.md` exists. Required fleet/project knowledge still belongs in synced guidance, repo docs, skills, or the wiki — Codex generated memory is a secondary per-host recall layer, not the source of truth.
+
+The **Claude skill tree is canonical**. Fleet custom skills live under `~/.claude/skills/`; `~/.codex/skills/<name>` entries are chezmoi-managed symlinks to those same directories, so never copy-fork a skill between assistants. The newer reusable Vikunja client lives in that shared tree. Codex's `~/.codex/hooks.json` registers the same `bash-guards.sh` dispatcher; this Bash hook protocol was verified compatible on Codex 0.145. Transcript/edit-shape-dependent hooks are not assumed compatible — see `writing-fleet-hooks`.
 
 ## Memory vs this file
 

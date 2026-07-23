@@ -1,6 +1,6 @@
 ---
 name: fleet-sync-architecture
-description: Use when debugging or reasoning about how the fleet (flattop/wanda/serp/bondo + balganor/living-pi as Claude-Code-less peers) shares config via chezmoi (what's tracked where, the sync hooks, why an edit did/didn't propagate), or when onboarding a brand-new host into the fleet. Reference for the chezmoi+GitHub topology — NOT needed for routine edits (the chezmoi-readd hook and `chezmoi-sync` skill handle those).
+description: Use when debugging or reasoning about how the fleet (flattop/wanda/serp/bondo + balganor/living-pi as agent-less peers) shares Claude Code and Codex configuration via chezmoi, including what is canonical, what is per-host, shared skills/hooks, why an edit did or did not propagate, or onboarding a new host. Reference for the chezmoi+GitHub topology; not needed for routine edits.
 ---
 
 # Fleet sync architecture
@@ -18,12 +18,18 @@ The fleet (flattop/wanda/serp/bondo, plus balganor and living-pi as Claude-Code-
 | `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/CLAUDE.md` | all chezmoi-tracked — same on every host |
 | `~/.claude/settings.local.json` | per-host permission overrides — **not** chezmoi-tracked |
 | `~/.claude/projects/.../memory/` | per-host memories — **not** chezmoi-tracked |
+| `~/.codex/AGENTS.md` | compact global Codex routing/policy; points into the canonical Claude policy, skills, repos, and wiki |
+| `~/.codex/config.toml` | co-managed by `dot_codex/modify_private_config.toml`; fleet defaults plus Codex-owned trust/TUI state |
+| `~/.codex/hooks.json` | Codex lifecycle registry; currently shares the fleet Bash guard |
+| `~/.codex/skills/<name>` | chezmoi-managed symlinks to canonical `~/.claude/skills/<name>` directories |
+| `~/.codex/memories*` | generated per-host Codex recall state — **not** chezmoi-tracked and never required guidance |
 
 ## Hooks that make it work
 
 - `chezmoi-preflight.sh` — **PreToolUse** on `Edit|Write|MultiEdit`. Warns on stderr if the chezmoi source is behind origin (cached 5-min fetch) or if you're editing a rendered target whose `.tmpl` you should edit instead.
 - `chezmoi-readd.sh` — **PostToolUse** on `Edit|Write|MultiEdit`. When the edited path is a chezmoi-managed target and not templated, runs `chezmoi re-add` so the source tree mirrors `$HOME`. (Editing the SOURCE tree directly is the reverse path — readd correctly no-ops there, so you must `chezmoi apply <target>` yourself.)
 - `bash-guards.sh` — **PreToolUse** on `Bash`, fleet-wide: the merged blast-radius / AUR-review / npm-review dispatcher (one process + one jq per Bash call; consolidated 2026-07-01).
+- Codex registers that same dispatcher from `~/.codex/hooks.json`. The Bash payload and exit-2 block contract were verified compatible on Codex 0.145 (2026-07-23). Each new/changed hook hash must be reviewed in Codex `/hooks`.
 - `chezmoi-sync.sh` — **not registered as a hook**. Manually invoked (typically by Claude driving the workflow, sometimes via `/chezmoi-sync`). Refuses on a dirty tree, pushes `origin/master`, then ssh's each peer (self-excluded via `hostname -s`) to run `chezmoi update`.
 - `notify-tmux.sh` — **Notification**. Only fires inside tmux (guarded by `$TMUX`). Calls `notify-send` with tmux window context so Claude notifications reach KDE even when tmux swallows the OSC 9 sequence.
 
@@ -40,3 +46,4 @@ For the registration/hostname-conditional pattern and the per-host verify comman
 5. Add the new short hostname to the `peers=(...)` array in `dot_claude/hooks/executable_chezmoi-sync.sh`.
 6. If the host needs its own hooks, drop them in `dot_claude/hooks/executable_<name>.sh` and wrap the `modify_private_settings.json.tmpl` registration in `{{ if eq .chezmoi.hostname "<host>" }} ... {{ end }}` (see `writing-fleet-hooks`).
 7. Commit, push, sync. Verify the new host's rendered `settings.json` matches expectations.
+8. If the host runs Codex, verify `~/.codex/{AGENTS.md,config.toml,hooks.json}`, the shared skill symlinks, `codex doctor --summary`, and trust the reviewed hook hash with `/hooks`.
