@@ -22,8 +22,11 @@ ops wiki.
 
 - `~/.claude/CLAUDE.md` is currently the canonical, chezmoi-synced fleet policy
   shared with Claude Code. This file is Codex's compact entry point into it.
-  Before non-trivial fleet work, read the relevant sections there. When Dave
-  says "check/reload your memory," re-read both files in full.
+  Before non-trivial fleet work, read the relevant sections there. If the
+  rendered Claude target is deliberately absent, read the canonical source at
+  `~/.local/share/chezmoi/dot_claude/CLAUDE.md` instead. When Dave says
+  "check/reload your memory," re-read this file and whichever canonical policy
+  path exists in full.
 - Repository `AGENTS.md`, `CLAUDE.md`, and their routed docs hold project truth.
   Codex is configured to use `CLAUDE.md` as a fallback only when a directory has
   no `AGENTS.md`. If `AGENTS.md` exists and points elsewhere, follow that route.

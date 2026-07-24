@@ -3,8 +3,9 @@
 #
 # Merges blast-radius.sh + aur-review.sh + npm-install-review.sh (2026-07-01,
 # aiImprove audit): three hook processes × 2 jq forks each per Bash call became
-# ONE process + ONE jq parse. Guard semantics and the block-once + env-override
-# idiom are unchanged: BLAST_OK=1 / AUR_OK=1 / NPM_OK=1 prefixes pass through.
+# ONE process + ONE jq parse. Guard semantics use a block-once + explicit
+# env-prefix override: `env BLAST_OK=1 ...`, `env AUR_OK=1 ...`, or
+# `env NPM_OK=1 ...`.
 # The old three scripts are exec-shims onto this file for sessions that
 # snapshotted the pre-merge registration; delete them once those sessions end.
 #
@@ -34,9 +35,18 @@ BIN='(/[[:alnum:]_./-]*/)?'
 # Command position: start of line, or after ; & | or $( — optionally sudo/command/exec.
 POS='(^|[;&|]|[$][(])[[:space:]]*(sudo[[:space:]]+)?(command[[:space:]]+|exec[[:space:]]+)?'
 
+# Accept an override only in the documented leading `env NAME=1` form. A
+# substring anywhere else (for example, `echo BLAST_OK=1; kill ...`) must not
+# disable the guard.
+has_review_override() {
+  override_name="$1"
+  printf '%s' "$cmd" |
+    grep -qE "^[[:space:]]*(/usr/bin/)?env[[:space:]]+${override_name}=1([[:space:]]|$)"
+}
+
 # ---------------------------------------------------------------- BLAST RADIUS
 # Kill/stress-class commands: force one deliberate look at the process table.
-case "$cmd" in *BLAST_OK=1*) : ;; *)
+if ! has_review_override BLAST_OK; then
 if printf '%s' "$cmd" | grep -qE "(^|[;&|[:space:]])(sudo[[:space:]]+)?(command[[:space:]]+|exec[[:space:]]+)?${BIN}(kill|pkill|killall|stress|stress-ng)\b"; then
   {
     echo "BLAST-RADIUS GUARD: this command kills processes or loads the system."
@@ -59,12 +69,13 @@ if printf '%s' "$cmd" | grep -qE "(^|[;&|[:space:]])(sudo[[:space:]]+)?(command[
     echo "If anything listed could be the user's live work, STOP and ask Dave first."
   } >&2
   exit 2
-fi ;; esac
+fi
+fi
 
 # ------------------------------------------------------------------ AUR REVIEW
 # AUR builds/installs/upgrades run arbitrary maintainer code; read the PKGBUILD
 # first. Read-only ops (-Ss/-Si/-Q*, and -G, the review-fetch itself) pass.
-case "$cmd" in *AUR_OK=1*) : ;; *)
+if ! has_review_override AUR_OK; then
 if printf '%s' "$cmd" | grep -qE '\b(yay|paru|makepkg|pacman)\b'; then
   aur_blocked=0
   printf '%s' "$cmd" | grep -qE "${POS}${BIN}(yay|paru)[[:space:]]+-S[a-z]*u"                 && aur_blocked=1
@@ -96,12 +107,13 @@ if printf '%s' "$cmd" | grep -qE '\b(yay|paru|makepkg|pacman)\b'; then
     } >&2
     exit 2
   fi
-fi ;; esac
+fi
+fi
 
 # ------------------------------------------------------------------ NPM REVIEW
 # Global JS installs + remote-exec (npx-class) pull whole dependency trees and
 # run lifecycle scripts — supply-chain vector. Local installs stay ungated.
-case "$cmd" in *NPM_OK=1*) : ;; *)
+if ! has_review_override NPM_OK; then
 if printf '%s' "$cmd" | grep -qE '\b(npm|pnpm|yarn|bun|npx|bunx)\b'; then
   GLOBAL='([[:space:]]-g([[:space:]]|$)|--global(=true)?([[:space:]]|$)|--location[= ]global)'
   npm_blocked=0
@@ -136,6 +148,7 @@ if printf '%s' "$cmd" | grep -qE '\b(npm|pnpm|yarn|bun|npx|bunx)\b'; then
     } >&2
     exit 2
   fi
-fi ;; esac
+fi
+fi
 
 exit 0

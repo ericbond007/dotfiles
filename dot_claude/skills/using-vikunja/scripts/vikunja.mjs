@@ -9,30 +9,63 @@
 
 import { execFileSync } from 'node:child_process';
 
-const API = process.env.VIKUNJA_API_BASE ?? 'https://projects.ericbond.net/api/v1';
+const DEFAULT_API = 'https://projects.ericbond.net/api/v1';
+const DEFAULT_TOKEN_REF = 'op://vault.ericbond.net/projects api key/password';
 const TOKEN_REF =
-  process.env.VIKUNJA_TOKEN_REF ?? 'op://vault.ericbond.net/projects api key/password';
-const TITLE_OK = /^(?:🔴|🟡|⚪)?\s?#(\d+)\s—\s/u;
+  process.env.VIKUNJA_TOKEN_REF ?? DEFAULT_TOKEN_REF;
+const TITLE_OK = /^(?:🔴|🟡|⚪)?\s?#(\d+[a-z]?)\s—\s/u;
 const SEVERITIES = Object.freeze({
+  critical: { priority: 5, emoji: '🔴' },
+  high: { priority: 4, emoji: '🔴' },
   bug: { priority: 3, emoji: '🔴' },
   medium: { priority: 3, emoji: '🟡' },
   low: { priority: 1, emoji: '⚪' },
   backlog: { priority: 0, emoji: '' },
 });
 
+function apiBase() {
+  const raw = process.env.VIKUNJA_API_BASE ?? DEFAULT_API;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`Invalid VIKUNJA_API_BASE: ${raw}`);
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('VIKUNJA_API_BASE must not contain credentials, a query, or a fragment');
+  }
+
+  const production = new URL(DEFAULT_API);
+  if (parsed.origin !== production.origin) {
+    const local = new Set(['localhost', '127.0.0.1', '[::1]']).has(parsed.hostname);
+    if (parsed.protocol !== 'https:' && !(local && parsed.protocol === 'http:')) {
+      throw new Error('A custom VIKUNJA_API_BASE must use HTTPS (HTTP is allowed only on localhost)');
+    }
+    if (!process.env.VIKUNJA_TOKEN_REF || TOKEN_REF === DEFAULT_TOKEN_REF) {
+      throw new Error(
+        'Refusing to send the production Vikunja token to a custom API host; ' +
+          'set a distinct VIKUNJA_TOKEN_REF for that host',
+      );
+    }
+  }
+  return raw.replace(/\/+$/, '');
+}
+
+const API = apiBase();
+
 function usage(message) {
   if (message) process.stderr.write(`${message}\n\n`);
   process.stderr.write(`Usage:
   vikunja.mjs list --project <id> [--all] [--json]
-  vikunja.mjs audit --project <id> [--all] [--repo <path>] [--rev <rev>] [--json]
+  vikunja.mjs audit --project <id> [--repo <path>] [--rev <rev>] [--json]
   vikunja.mjs get <task-id> [task-id...]
   vikunja.mjs views --project <id> [--json]
   vikunja.mjs buckets --project <id> [--view <id>] [--json]
-  vikunja.mjs create --project <id> --severity <bug|medium|low|backlog>
+  vikunja.mjs create --project <id> --severity <critical|high|bug|medium|low|backlog>
                      --title <text> --description <text> [--bucket <name>]
-  vikunja.mjs edit <task-id> --severity <bug|medium|low|backlog>
+  vikunja.mjs edit <task-id> --severity <critical|high|bug|medium|low|backlog>
                    --title <text> --description <text>
-  vikunja.mjs severity <task-id> [task-id...] --severity <bug|medium|low|backlog>
+  vikunja.mjs severity <task-id> [task-id...] --severity <critical|high|bug|medium|low|backlog>
   vikunja.mjs comment <task-id> --text <text>
   vikunja.mjs move <task-id> --project <id> --bucket <name> [--view <id>]
   vikunja.mjs start <task-id> --project <id> [--view <id>] [--comment <text>]
@@ -45,7 +78,8 @@ function usage(message) {
 
 Environment:
   VIKUNJA_API_BASE   API root (default: https://projects.ericbond.net/api/v1)
-  VIKUNJA_TOKEN_REF  1Password secret reference
+  VIKUNJA_TOKEN_REF  1Password secret reference; a distinct explicit ref is
+                     required when VIKUNJA_API_BASE uses another host
 `);
   process.exit(message ? 2 : 0);
 }
@@ -201,13 +235,17 @@ function severity(name) {
   return result;
 }
 
-function formattedTitle(id, title, emoji) {
+function titleIdentifier(task) {
+  return task.title.match(TITLE_OK)?.[1] ?? String(task.id);
+}
+
+function formattedTitle(identifier, title, emoji) {
   const withoutPrefix = title
-    .replace(/^(?:(?:(?:🔴|🟡|⚪)\s*)?#\d+\s—\s*)+/u, '')
+    .replace(/^(?:(?:(?:🔴|🟡|⚪)\s*)?#\d+[a-z]?\s—\s*)+/u, '')
     .replace(/^(?:BUG|TODO):\s*/i, '')
     .trim();
   if (withoutPrefix === '') usage('Title must not be empty');
-  return `${emoji === '' ? '' : `${emoji} `}#${id} — ${withoutPrefix}`;
+  return `${emoji === '' ? '' : `${emoji} `}#${identifier} — ${withoutPrefix}`;
 }
 
 function concise(task) {
@@ -227,7 +265,11 @@ function concise(task) {
 function taskIssues(task) {
   const issues = [];
   const titleMatch = task.title.match(TITLE_OK);
-  if (!titleMatch || Number(titleMatch[1]) !== task.id) issues.push('title-format');
+  if (!titleMatch) {
+    issues.push('title-format');
+  } else if (titleMatch[1] !== String(task.id)) {
+    issues.push('legacy-display-id');
+  }
   if ((task.description ?? '').replaceAll(/<[^>]*>/g, '').trim() === '') {
     issues.push('missing-description');
   }
@@ -293,6 +335,9 @@ try {
         [formattedTitle(1495, '#1495 — Scanner admin', ''), '#1495 — Scanner admin'],
         [formattedTitle(42, '🔴 #42 — Broken auth', '⚪'), '⚪ #42 — Broken auth'],
         [formattedTitle(7, 'BUG: Bad state', '🔴'), '🔴 #7 — Bad state'],
+        [formattedTitle('287a', '⚪ #287a — Slice', '🔴'), '🔴 #287a — Slice'],
+        [severity('critical').priority, 5],
+        [severity('high').priority, 4],
       ];
       for (const [actual, expected] of checks) {
         if (actual !== expected) throw new Error(`self-test failed: ${actual} !== ${expected}`);
@@ -309,7 +354,7 @@ try {
 
     case 'audit': {
       const project = positiveInt(required(options, 'project'), 'project id');
-      const tasks = await projectTasks(project, Boolean(options.all));
+      const tasks = await projectTasks(project, true);
       let shipped = new Set();
       if (options.repo) {
         const log = execFileSync(
@@ -397,7 +442,11 @@ try {
       const id = positiveInt(positional[0], 'task id');
       const selected = severity(required(options, 'severity'));
       const task = await getTask(id, false);
-      task.title = formattedTitle(id, required(options, 'title'), selected.emoji);
+      task.title = formattedTitle(
+        titleIdentifier(task),
+        required(options, 'title'),
+        selected.emoji,
+      );
       task.description = required(options, 'description').trim();
       task.priority = selected.priority;
       console.log(JSON.stringify(concise(await http('POST', `/tasks/${id}`, task)), null, 2));
@@ -411,7 +460,7 @@ try {
       for (const raw of positional) {
         const id = positiveInt(raw, 'task id');
         const task = await getTask(id, false);
-        task.title = formattedTitle(id, task.title, selected.emoji);
+        task.title = formattedTitle(titleIdentifier(task), task.title, selected.emoji);
         task.priority = selected.priority;
         updated.push(concise(await http('POST', `/tasks/${id}`, task)));
       }

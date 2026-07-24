@@ -1,5 +1,5 @@
 ---
-description: Push chezmoi source changes to GitHub and pull+apply on all peer hosts (flattop, wanda, serp). Requires a clean working tree — commit first.
+description: Push chezmoi source changes to GitHub and pull+apply on every host in the sync script's current peer array. Requires a clean working tree — commit first.
 ---
 
 Run the fleet sync script and show the output verbatim so I can verify each step:

@@ -27,7 +27,7 @@ Read-only commands:
 
 ```bash
 $VK list --project <id> [--all] [--json]
-$VK audit --project <id> [--all] [--repo <path>] [--rev master] [--json]
+$VK audit --project <id> [--repo <path>] [--rev master] [--json]
 $VK get <task-id> [task-id...]
 $VK views --project <id>
 $VK buckets --project <id> [--view <id>]
@@ -38,7 +38,7 @@ Mutation commands:
 ```bash
 $VK create --project <id> --severity low --title "..." --description "..."
 $VK edit <task-id> --severity medium --title "..." --description "..."
-$VK severity <task-id> [task-id...] --severity backlog
+$VK severity <task-id> [task-id...] --severity high
 $VK move <task-id> --project <id> --bucket todo|doing|done
 $VK start <task-id> --project <id> [--comment "..."]
 $VK done <task-id> --project <id> [--comment "..."]
@@ -51,6 +51,9 @@ $VK relate <parent-id> <child-id> --kind subtask
 Run the script with `--help` for the complete syntax. Pass `--view` only when a
 project has multiple kanban views. Bucket names accept the common aliases
 To-Do/Backlog/Open, Doing/In Progress/Active, and Done/Shipped/Closed.
+`list` shows open tasks unless `--all` is passed; `audit` always includes done
+tasks because shipped work is institutional context and bucket consistency
+checks require it.
 Run `self-test` after modifying the client, then validate the skill directory.
 
 ## Authentication and API fallback
@@ -58,8 +61,10 @@ Run `self-test` after modifying the client, then validate the skill directory.
 The client reads the token directly into process memory from
 `op://vault.ericbond.net/projects api key/password`. Override the secret
 reference with `VIKUNJA_TOKEN_REF` for a project using a different vault item,
-or the API root with `VIKUNJA_API_BASE`. Never put tokens in command arguments,
-logs, or files.
+or the API root with `VIKUNJA_API_BASE`. A different API host requires a
+distinct, explicitly set `VIKUNJA_TOKEN_REF`; the client refuses to send the
+production token to another host. Never put tokens in command arguments, logs,
+or files.
 
 Use direct API code only when the bundled client genuinely lacks an operation.
 When extending the client would make that operation reusable, extend and test
@@ -125,7 +130,17 @@ Done = strictly hidden outside Shipped: every non-kanban view (List, Table, Gant
 
 Every task in every project follows three rules. Apply at create time AND retroactively if you find violators.
 
-**1. Title format**: `<emoji> #<task_id> — <descriptive title>` — always include the literal `#<id>` so tasks are referenceable in chat ("close #287" / "what's #266 about?"). The emoji marks severity at a glance.
+**1. Title format**: `<emoji> #<global_task_id> — <descriptive title>` — for
+new tasks, always use the numeric global API `task.id` so a chat reference such
+as "close #287" maps safely to `GET /tasks/287`. The emoji marks severity at a
+glance.
+
+Imported projects may contain a legacy display number (or suffix such as
+`#287a`) that does **not** equal the global task ID. Treat that prefix as display
+text only: resolve the task from the project listing, operate on the returned
+numeric `task.id`, and preserve the legacy prefix unless Dave explicitly asks
+to migrate the numbering. The bundled client reports this as
+`legacy-display-id` and preserves it during severity/title edits.
 
 | Tier | Priority | Emoji | When |
 |---|---|---|---|
@@ -203,13 +218,17 @@ def fix_task(tid, prio, emoji, desc_if_missing=None):
 
 ### Looking up a specific ticket — and why `?s=` will lie to you
 
-**When you have a ticket ID** (`#1040`, `#287`, etc.), ALWAYS look it up by direct GET:
+**When you have a confirmed global task ID**, ALWAYS look it up by direct GET:
 
 ```python
 t = http("GET", f"/tasks/{tid}")
 ```
 
-This works for both open AND shipped tickets, and is the only reliable way to confirm a ticket exists. Do not assume "ticket X doesn't exist" from anything except a 404 on this endpoint.
+This works for both open AND shipped tickets, and is the only reliable way to
+confirm a global task exists. In an imported project, a `#N` title prefix may
+be only a legacy display number; first resolve it by walking that project's
+task listing and use the separate numeric `id` field. Never send a legacy
+display number to `/tasks/<id>`.
 
 **The `?s=<query>` fuzzy search is unreliable for ID lookups.** Even searching for the ID digits in title text can silently miss the ticket — the matching is loose and ranks results by an opaque score, so a ticket whose title is literally `🟢 #1040 — Historical mileage pass` may NOT appear when you query `?s=mile sequencing` or `?s=mileage`. Burned by this 2026-05-26: an agent reported `#1040 NOT FOUND` when it was a real shipped ticket — a follow-up was filed unnecessarily.
 
@@ -245,15 +264,20 @@ The done-skip in the stale-ticket recipe below is a deliberate exception for tha
 
 ### Find tasks that need title-format repair
 
-Pair with `fix_task` above — that function repairs a known tid; this sweep discovers which tids need it. Run after every "sync with Vikunja" / new-project bootstrap.
+Pair with `fix_task` above — that function repairs a known global task ID; this
+sweep discovers which tasks need it. Do not feed a legacy display-ID mismatch
+into `fix_task`; preserve it and operate on the listing's global `id`.
 
 ```python
 import re
-TITLE_OK = re.compile(r"^[🔴🟡⚪]?\s?#\d+\s—\s")  # emoji optional, #<tid> + em-dash required
+TITLE_OK = re.compile(r"^[🔴🟡⚪]?\s?#(\d+[a-z]?)\s—\s")
 for tid, title, done in [(t['id'], t['title'], t['done']) for _, t in tasks]:
     if done: continue
-    if not TITLE_OK.match(title):
+    match = TITLE_OK.match(title)
+    if not match:
         print(f"format-violator: #{tid} {title[:80]}")
+    elif match.group(1) != str(tid):
+        print(f"legacy-display-id: global={tid} display={match.group(1)}")
 ```
 
 Feed each violator id into `fix_task(tid, prio, emoji, desc_if_missing)`. Pick `prio`/`emoji` from the severity tier table — for raw quick-capture entries Dave dropped in, default to ⚪/1 unless context says otherwise.
@@ -265,19 +289,20 @@ Cross-reference open tickets against shipped commit messages. The deliverable sh
 ```python
 import subprocess, re
 log = subprocess.check_output(['git', 'log', 'master', '--oneline'], cwd=repo_path).decode()
-shipped = set(re.findall(r"#(\d+[a-z]?)", log))
+shipped = set(map(int, re.findall(r"#(\d+)", log)))
 for proj, t in tasks:
     if t['done']: continue
-    m = re.search(r"#(\d+[a-z]?)", t['title'])
-    if m and m.group(1) in shipped:
-        print(f"likely-stale: #{t['id']} matches commit #{m.group(1)} — {t['title'][:80]}")
+    if t['id'] in shipped:
+        print(f"likely-stale: global #{t['id']} appears in a commit — {t['title'][:80]}")
 ```
 
 **Verify before closing.** A `#306 phase 1` shipping doesn't mean `#306 phase 3` shipped — read the actual commit messages for phase qualifiers, slice letters, and partial-implementation notes. Mark done only when the ticket's stated deliverable is genuinely merged.
 
 ### Parent / child relations
 
-For sliced clusters (e.g. parent #287 → children #287a/b/c/d), use the `subtask` relation. Vikunja v2.3 auto-mirrors: creating `subtask` from parent's side auto-creates `parenttask` from the child's side.
+For sliced clusters, use the `subtask` relation. Vikunja v2.3 auto-mirrors:
+creating `subtask` from the parent's side auto-creates `parenttask` from the
+child's side.
 
 ```python
 http("PUT", f"/tasks/{parent_id}/relations", {
@@ -290,8 +315,9 @@ http("PUT", f"/tasks/{parent_id}/relations", {
 Other relation kinds: `parenttask`, `related`, `duplicateof`, `duplicates`, `blocking`, `blocked`, `precedes`, `follows`, `copiedfrom`, `copiedto`, `unknown`.
 
 Convention:
-- Umbrella ticket has bare issue id ("#287 — Named bot profiles")
-- Children have suffix ("#287a — Profile registry", "#287b — Persona variants")
+- Umbrella and children each keep their own numeric global IDs.
+- Put slice names such as "Profile registry — slice A" in the descriptive title
+  rather than inventing non-addressable ID suffixes.
 - Mark umbrella done only when ALL children are done
 
 ### Update view filters
@@ -304,12 +330,10 @@ http("POST", f"/projects/{proj}/views/{view_id}", view)
 
 ### Delete task
 
-```python
-urllib.request.urlopen(urllib.request.Request(
-    f"https://projects.ericbond.net/api/v1/tasks/{tid}",
-    headers=H, method="DELETE"
-)).read()
-```
+Auditing, checking, syncing, or grooming does not authorize deletion. Delete a
+task only after Dave explicitly requests deletion of that exact resolved global
+task ID. Prefer preserving shipped context or migrating it to a durable
+repository record.
 
 ## Bootstrapping a new project
 
@@ -334,7 +358,10 @@ The skill stays generic; per-project memory holds the IDs.
 
 ### Lean Vikunja
 
-Hundreds of shipped tickets in a backlog is a UX disaster. Keep only **active work** — open + in-progress + recently shipped. Migrate-and-delete old shipped items; the audit trail lives in git log + PR descriptions, not Vikunja.
+Keep active views focused on open, in-progress, and recently shipped work.
+Older shipped tasks remain valid institutional context and stay hidden from
+active views. Migrate or delete them only as a separate, explicitly authorized
+retention task after verifying the durable repository record.
 
 ### Mark transitions on PR events, not by hand
 
@@ -347,7 +374,10 @@ See the "Title format + description + severity" section near the top — bugs ge
 
 ### Slice clusters get parent/child wiring
 
-When a ticket grows too big and gets sliced (e.g. #287 → #287a/b/c/d), create the children as separate tickets and wire the `subtask` relation. Vikunja v2.3 auto-mirrors. Mark the umbrella done when all children are done.
+When a ticket grows too big and gets sliced, create children as separate tasks
+with their own global IDs and wire the `subtask` relation. Put slice names in
+the descriptive title, not in an ID suffix. Vikunja v2.3 auto-mirrors. Mark the
+umbrella done when all children are done.
 
 ### Organizing a project into group tabs (Views + Labels)
 
@@ -394,7 +424,7 @@ print([p for p in spec['paths'] if 'label' in p])
 - **Per-page default is small (~50).** Always paginate with `?per_page=50&page=N` and stop when the chunk is shorter than per_page.
 - **The `priority` field uses 1-5 (1=lowest, 5=highest).** Frontend renders ⚪ low (1) / 🟡 mid (2-3) / 🔴 high (4-5).
 - **Views are project-scoped.** A custom View only filters tickets in its own project; parent projects do NOT aggregate child-project tasks into their Views. Cross-project group tabs therefore render incompletely — unify the cluster into one project first.
-- **In migrated projects, the `#N` in a title may NOT be the global task `id`.** If a project was imported (e.g. from a TODO.md), titles often kept the old display numbers while Vikunja assigned fresh global ids — and those display numbers can collide with *other* projects' global ids. Never `GET/POST/relate /tasks/<displayN>`; always resolve the real global `id` from the project task listing first.
+- **In migrated projects, the `#N` or `#Na` in a title may NOT be the global task `id`.** If a project was imported (e.g. from a TODO.md), titles often kept old display numbers while Vikunja assigned fresh global IDs, and those display numbers can collide with other projects' real IDs. Never `GET/POST/relate /tasks/<displayN>`; always resolve the numeric global `id` from the project task listing first. The bundled client accepts only numeric global IDs and preserves legacy display prefixes on edits.
 
 ## When to invoke this skill
 

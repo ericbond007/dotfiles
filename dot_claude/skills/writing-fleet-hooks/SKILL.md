@@ -39,9 +39,13 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 - Codex 0.145 sends the same `tool_name`, `tool_input.command`, `cwd`,
   `session_id`, and `transcript_path` fields for `PreToolUse(Bash)`. Exit 2
   blocks before execution. The shared `bash-guards.sh` is verified on both.
-- Codex requires explicit hash-bound trust for non-managed hooks. After every
-  registry or command change, open `/hooks`, review the exact command, and trust
-  it; verify without `--dangerously-bypass-hook-trust`.
+- Codex requires explicit hash-bound trust for non-managed hook definitions.
+  Trusting a command that merely names a mutable script does not attest that
+  script's later content. The shared Bash guard therefore embeds the source
+  file's SHA-256 in the registered command and exits 2 on mismatch. After every
+  registry, command, or pinned-script change, update the expected SHA-256, open
+  `/hooks`, review the exact command, and trust it; verify without
+  `--dangerously-bypass-hook-trust`.
 - Do **not** assume other hooks are portable. Codex file writes normally arrive
   as `apply_patch`, not Claude's `Edit`/`Write` `file_path` shape, and transcript
   JSONL is not a stable cross-product format. `chezmoi-preflight.sh`,
@@ -80,11 +84,14 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 If the hook is also Codex-compatible:
 
 8. Register it in `dot_codex/hooks.json`, apply `~/.codex/hooks.json`, then open
-   Codex `/hooks`, review, and trust the new hash. A Codex-compatible shared
-   script must also work on Codex-only hosts: invoke the canonical
+   Codex `/hooks`, review, and trust the new definition. A Codex-compatible
+   shared script must also work on Codex-only hosts: invoke the canonical
    `dot_claude/hooks/executable_<name>.sh` source through Bash, or create a
    Codex-managed executable target. Do not point at `~/.claude/hooks/<name>.sh`
-   unless Claude targets are guaranteed present on every intended host.
+   unless Claude targets are guaranteed present on every intended host. For a
+   writable script source, pin its SHA-256 inside the registered command and
+   exit 2 before execution when the actual hash differs; update that pin with
+   every script-content change.
 9. Run an isolated trigger through a normal Codex session (no hook-trust
    bypass) and prove the expected pass/block behavior.
 

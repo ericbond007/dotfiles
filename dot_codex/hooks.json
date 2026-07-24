@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /home/eric/.local/share/chezmoi/dot_claude/hooks/executable_bash-guards.sh",
+            "command": "guard=/home/eric/.local/share/chezmoi/dot_claude/hooks/executable_bash-guards.sh; expected=cba311437970330caaee9864a06f16fb55a451c75bc7ce2684a0a4eba85be78c; actual=$(/usr/bin/sha256sum \"$guard\" 2>/dev/null | /usr/bin/cut -d ' ' -f 1); if [ \"$actual\" != \"$expected\" ]; then echo \"Codex Bash guard hash mismatch; review dotfiles and hooks.json before continuing.\" >&2; exit 2; fi; exec /usr/bin/bash \"$guard\"",
             "timeout": 15,
             "statusMessage": "Checking fleet shell safety policy"
           }
