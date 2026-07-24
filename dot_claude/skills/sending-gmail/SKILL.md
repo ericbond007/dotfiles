@@ -1,6 +1,6 @@
 ---
 name: sending-gmail
-description: Use when Dave asks you (Claude/HAL) to send an email on his behalf from his personal Gmail, ericbond007@gmail.com — e.g. "email mom", "send <person> an email", "email yourself a test", "reply to X by email". Sends via Gmail SMTP using the gmail-smtp 1Password credential. NOT for fleet/service mail — that's sending-email-programmatically (wanda Postfix).
+description: Use when Dave asks you (Claude/HAL) to send an email on his behalf from his personal Gmail, ericbond007@gmail.com — e.g. "email mom", "send someone an email", "email yourself a test", "reply to X by email". Sends via Gmail SMTP using the gmail-smtp 1Password credential. NOT for fleet/service mail — that's sending-email-programmatically (wanda Postfix).
 ---
 
 # Sending email as Dave's Gmail
