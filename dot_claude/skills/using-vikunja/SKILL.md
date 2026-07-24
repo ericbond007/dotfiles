@@ -200,16 +200,19 @@ When auditing a project, retroactively bring all tasks into compliance — see "
 
 ```python
 def fix_task(tid, prio, emoji, desc_if_missing=None):
+    import re
+
     t = http("GET", f"/tasks/{tid}")
     raw = t['title']
+    # Preserve an imported legacy display id (including suffixes such as 287a).
+    match = re.match(r"^(?:(?:🔴|🟡|⚪)\s*)?#(\d+[a-z]?)\s+—\s+(.*)$", raw)
+    display_id = match.group(1) if match else str(tid)
+    raw = match.group(2) if match else raw
     # Strip redundant prefixes the emoji+label already convey.
     for p in ("BUG:", "bug:", "Bug:", "TODO:", "todo:"):
         if raw.startswith(p): raw = raw[len(p):].strip()
-    # Don't double-prefix.
-    already = raw.startswith(f"#{tid} —") or any(raw.startswith(f"{e} #{tid} —") for e in "🔴🟡⚪")
-    if not already:
-        raw = f"{emoji} #{tid} — {raw}".lstrip() if emoji else f"#{tid} — {raw}"
-    t['title'] = raw
+    prefix = f"{emoji} " if emoji else ""
+    t['title'] = f"{prefix}#{display_id} — {raw}"
     t['priority'] = prio
     if desc_if_missing and not (t.get('description') or '').strip():
         t['description'] = desc_if_missing

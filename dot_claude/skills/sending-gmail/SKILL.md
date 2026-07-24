@@ -9,8 +9,16 @@ When Dave asks you to email someone, send it as **ericbond007@gmail.com** using
 the bundled CLI. This is real outbound mail from Dave's personal account — treat
 it as an action that is hard to undo, and that goes out *as Dave*.
 
-**Tool:** `~/.claude/skills/sending-gmail/send-gmail` (present on every fleet host
-after chezmoi sync).
+**Tool invocation:**
+
+- Hosts with Claude configuration:
+  `~/.claude/skills/sending-gmail/send-gmail`
+- Codex-only hosts:
+  `python3 ~/.agents/skills/sending-gmail/executable_send-gmail`
+
+The Codex-only path points into the chezmoi source tree, where the
+`executable_` filename is source metadata rather than the installed filename.
+Invoke it with Python because that source file intentionally is not executable.
 
 ## Credentials
 Fetched at runtime from 1Password item `gmail-smtp` (vault `vault.ericbond.net`)
@@ -28,10 +36,12 @@ personal addresses never reach the dotfiles repo). An unknown alias makes the
 tool error with the list of known aliases — do NOT guess an address.
 
 ## How to send (confirm before the real send)
-1. **Preview:** `send-gmail --to <recip> --subject "<subj>" --body "<body>" --dry-run`
-2. Show Dave the resolved **To / Subject / Body** and get explicit confirmation.
-3. **Send:** rerun the identical command without `--dry-run`.
-4. Report the tool's `Sent to <address>` line; on any `error:` line, report it
+1. Select the appropriate tool invocation above.
+2. **Preview:** run it with
+   `--to <recip> --subject "<subj>" --body "<body>" --dry-run`.
+3. Show Dave the resolved **To / Subject / Body** and get explicit confirmation.
+4. **Send:** rerun the identical command without `--dry-run`.
+5. Report the tool's `Sent to <address>` line; on any `error:` line, report it
    verbatim and do not blind-retry.
 
 A multi-line body: pass `--body "..."` or pipe it on stdin and omit `--body`.

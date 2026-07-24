@@ -220,7 +220,12 @@ async function resolveBucket(project, requestedView, requestedBucket) {
 }
 
 async function moveTask(id, project, requestedView, requestedBucket) {
-  const { view, bucket } = await resolveBucket(project, requestedView, requestedBucket);
+  const destination = await resolveBucket(project, requestedView, requestedBucket);
+  return moveTaskTo(id, project, destination);
+}
+
+async function moveTaskTo(id, project, destination) {
+  const { view, bucket } = destination;
   await http('POST', `/projects/${project}/views/${view.id}/buckets/${bucket.id}/tasks`, {
     task_id: id,
     project_view_id: view.id,
@@ -424,16 +429,16 @@ try {
       const selected = severity(required(options, 'severity'));
       const title = required(options, 'title');
       const description = required(options, 'description').trim();
-      const created = await http('PUT', `/projects/${project}/tasks`, { title, description });
-      created.title = formattedTitle(created.id, title, selected.emoji);
-      created.priority = selected.priority;
-      const updated = await http('POST', `/tasks/${created.id}`, created);
-      const moved = await moveTask(
-        created.id,
+      const destination = await resolveBucket(
         project,
         options.view,
         options.bucket ?? 'todo',
       );
+      const created = await http('PUT', `/projects/${project}/tasks`, { title, description });
+      created.title = formattedTitle(created.id, title, selected.emoji);
+      created.priority = selected.priority;
+      const updated = await http('POST', `/tasks/${created.id}`, created);
+      const moved = await moveTaskTo(created.id, project, destination);
       console.log(JSON.stringify({ task: concise(updated), moved }, null, 2));
       break;
     }
@@ -492,8 +497,13 @@ try {
       const id = positiveInt(positional[0], 'task id');
       const project = positiveInt(required(options, 'project'), 'project id');
       const done = command === 'done';
+      const destination = await resolveBucket(
+        project,
+        options.view,
+        done ? 'done' : 'doing',
+      );
       await setDone(id, done);
-      const moved = await moveTask(id, project, options.view, done ? 'done' : 'doing');
+      const moved = await moveTaskTo(id, project, destination);
       if (options.comment) {
         await http('PUT', `/tasks/${id}/comments`, { comment: options.comment.trim() });
       }
