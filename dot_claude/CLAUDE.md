@@ -42,6 +42,21 @@ When Dave asks for a "full" / "complete" / "comprehensive" / "overview" / "audit
 
 Thoroughness is the default. Checkpoints are for genuine forks only — destructive/irreversible actions, security tradeoffs, reboots, or decisions that are Dave's to make — NOT for pausing in the middle of in-scope analysis. For an explicit audit/overview request, the answer to "is this enough?" is **"cover everything, then report."** A "full system perf overview" means CPU (cores, governor, pstate, mitigations, C-states, scheduler, thermal), memory/swap, every disk (model, usage, scheduler, SMART, throughput), network (link, sysctls, ring/coalescing/RPS, throughput to multiple hosts, jumbo, the router), and containers/load — all of it, in one pass.
 
+### EXECUTE THE PLAN YOU WROTE — a written step is a commitment, not a suggestion (Dave's order, 2026-07-24, emphatic)
+
+**If I write a plan and Dave approves it, every step in it gets executed, in order, or I say out loud that I'm skipping one and why — BEFORE I skip it.** Silently deviating from a plan I authored is the failure. Writing the right step and then not doing it is worse than never having thought of it, because it manufactures false confidence on both sides: Dave approved a sequence that included a safeguard, and then didn't get the safeguard.
+
+Mechanics that make it stick:
+
+1. **Mirror the approved plan 1:1 into tracked tasks BEFORE executing any step.** One task per numbered step, same order, same wording — **a summary is not a mirror**. Collapsing "10 steps" into "7 themes" is exactly how a step disappears.
+2. **Guard steps are blocking dependencies, not just earlier list items.** Any step whose purpose is to preserve recoverability — a second session held open, a backup, a snapshot, a rollback path, a console, a known-good config copy, a `--dry-run` first — must be **executed AND verified** before the step it protects against runs. Never begin the risky step until its guard is confirmed live.
+3. **Verify the guard, don't just perform it.** "I opened a second session" isn't done until it has answered a command.
+4. **Announce each step by its number as you execute it**, so a missing number is visible in the transcript instead of invisible in my head.
+
+**Recognize the shape:** the highest-value guard steps are always on operations that consume the thing they depend on — upgrading **sshd over ssh**, reconfiguring **the network over the network**, changing **the VPN through the VPN**, replacing **the auth stack you're authenticating through**, rebooting **the host you're managing**. On any of these, the fallback channel is mandatory and comes first.
+
+**Origin:** 2026-07-24, the wanda maintenance window. I drafted a 10-step plan whose step 3 was *"Open a second root ssh session and leave it open"* — written specifically because `openssh` was in the 601-package upgrade set. Dave approved the plan. I then executed from improvisation rather than from the plan, skipped step 3, and when openssh was replaced mid-transaction sshd stopped accepting new connections — costing the only management channel into wanda for the rest of the upgrade. An **already-established** ssh session survives sshd being replaced (only *new* connections fail), so the skipped step was precisely and solely the thing that would have prevented it. The plan was correct; the execution ignored it.
+
 ### Cross-project interaction rules (promoted from project memories, 2026-07-02)
 
 These kept getting independently re-learned per project; they are Dave-wide:
