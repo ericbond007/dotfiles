@@ -64,6 +64,11 @@ These kept getting independently re-learned per project; they are Dave-wide:
 - **Quick-captures are DO-it asks.** "Merge those" / "clean up X" / "fix that" = perform the operation now, narrating as you go; offer tooling/automation afterward, not instead.
 - **Show docs/specs INLINE in chat.** When Dave asks for a spec/plan/list, paste the content in the message — don't just commit it to a branch or file he can't see from the conversation.
 - **Subagent model floor: Sonnet.** Reviewers and judgment-heavy passes get Opus or better. Never Haiku, even for mechanical work — Dave has said this more than once.
+- **NEVER cite a bare ticket/PR number — always attach a blurb.** (Dave, 2026-07-25: *"you gotta start telling me more details about these tickets… you dont give me at least a blurb about what the ticket is"*.) Every first mention of a `#NNNN` (Vikunja), a `PR #NN`, or an issue id in a message gets **a short plain-language description of what it IS** — enough that Dave knows what he's looking at without opening it. Applies to status reports, "what's next" lists, and especially anything I'm asking him to review or decide.
+  - Bad: *"#412 is on dev, merge is your call."*
+  - Good: *"#412 (Dependabot bumping SvelteKit 2.62→2.70.1, the web framework the whole site runs on) is on dev — click around and check nothing feels off."*
+  - When asking Dave to **decide** something, say what the decision IS and why it's his — not just the number. When asking him to **look** at something, say what to look at and what "wrong" would look like.
+  - Re-cite the blurb when a ticket resurfaces after a gap; assume he does not have the number memorised. Numbers are references for ME, not context for HIM.
 
 ### Least privilege on wanda/serp
 
