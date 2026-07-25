@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodic tmux-resurrect save (every 5 min)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+# Run a catch-up save if the machine was asleep/off at the scheduled time.
+Persistent=true
+AccuracySec=30s
+Unit=tmux-resurrect-save.service
+
+[Install]
+WantedBy=timers.target

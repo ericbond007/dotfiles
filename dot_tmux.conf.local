@@ -459,6 +459,25 @@ set -as terminal-features ',xterm-kitty:sync'
 # Revert with: tmux set -gw allow-set-title on
 setw -g allow-set-title off
 
+# -- resurrect autosave: driven by a systemd timer, NOT continuum (2026-07-25) -
+# tmux-continuum arms its autosave by injecting #(continuum_save.sh) into
+# status-right at plugin load (continuum.tmux add_resurrect_save_interpolation),
+# and SKIPS that whenever another_tmux_server_running() is true -- a process-count
+# heuristic ("tmux procs except current server" > "current server clients"),
+# measured borderline here at 2 vs 2. It lost that coin-flip at the 2026-07-21
+# server start: tpm_log.txt shows continuum loading that day, yet no interpolation
+# ever reached status-right and the last genuine autosave was 2026-07-17 -- eight
+# days of silently saving nothing. The failure is invisible until a restore is
+# needed, which is the worst possible time to discover it.
+#
+# So autosave is disabled here (interval 0) and driven instead by the user timer
+# tmux-resurrect-save.timer, which is deterministic, inspectable via systemctl,
+# independent of tmux's status bar, and adds ZERO #() subshell forks to the status
+# line -- which matters given the status-line thrash documented above.
+# @continuum-restore stays ON: auto-restore on server start is the useful half.
+set -g @continuum-save-interval '0'
+set -g @resurrect-capture-pane-contents 'on'
+
 # Show hostname:command in window titles
 set -g automatic-rename-format '#h:#{pane_current_command}'
 

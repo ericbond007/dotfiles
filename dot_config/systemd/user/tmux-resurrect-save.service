@@ -1,0 +1,15 @@
+[Unit]
+Description=Save tmux session layout via tmux-resurrect
+Documentation=https://github.com/tmux-plugins/tmux-resurrect
+# Replaces tmux-continuum's status-bar-driven autosave, which silently stopped
+# running on 2026-07-17 (see ~/.tmux.conf.local for the mechanism).
+
+[Service]
+Type=oneshot
+# Do nothing (cleanly) when no tmux server is running.
+ExecCondition=/usr/bin/tmux has-session
+ExecStart=%h/.tmux/plugins/tmux-resurrect/scripts/save.sh
+# save.sh shells out to tmux and standard utils.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+TimeoutStartSec=60
+Nice=10
