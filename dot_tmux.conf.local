@@ -408,28 +408,55 @@ bind C-o send-prefix
 # Kitty/neovim compatibility
 set -g allow-passthrough all
 set -s set-clipboard on
-# Declare kitty's DECSET 2026 (synchronized output) support so tmux 3.7+ hands
-# sync frames to kitty instead of its own buggy internal buffer. Without this,
-# tmux 3.7's new app-sync handling (PR #4744) collides with async status-line
-# redraws and the status bar paints blank under TUIs like Claude Code that emit
-# ?2026 every frame. Triggered by the 3.6b->3.7 upgrade on 2026-06-26.
+# Declare kitty's DECSET 2026 (synchronized output) support. This makes tmux wrap
+# its OWN redraws in ?2026 when writing to kitty (tty_sync_start/tty_sync_end,
+# tty.c), so a repaint lands atomically instead of tearing. Worth keeping.
+#
+# CORRECTION 2026-07-25: the original rationale here was wrong. It claimed this
+# changes how tmux handles the *app's* ?2026 ("hands sync frames to kitty instead
+# of its own buggy internal buffer") and thereby fixes the blank status bar. The
+# two are disjoint code paths: an app's inbound ?2026 is consumed unconditionally
+# by screen_write_start_sync() (input.c), which consults no tty and no terminal
+# feature, while TTYC_SYNC is only ever read on the outbound path. So this setting
+# cannot have fixed the blanking, and "PR #4744" was a miscitation of GitHub
+# *issue* 4744. The real cause of the 3.7 blank status bar is upstream issue 5367
+# -- see the block below. This line was never A/B tested; it is retained on its
+# own merits (atomic repaints), not as a fix.
 set -as terminal-features ',xterm-kitty:sync'
 
-# -- agent-TUI status-bar thrash (2026-07-25) ---------------------------------
+# -- agent-TUI status-bar load reduction (2026-07-25) -------------------------
+# SCOPE: tmux 3.7 / 3.7a / 3.7b ONLY. DELETE this block once running a tmux that
+# contains cba4ba9cd (on master + release_3.7c; in no release tag as of 3.7b).
+#
+# THE BUG (not fixed here -- see upstream GitHub issue 5367, bisected there):
+# 2d8aade7 ("Add time limit to a couple of other loops") made format_check_time()
+# call clock_gettime() once per CHARACTER in format_unescape()/format_strip()/
+# format_skip1(). Two of those, on exceeding FORMAT_TIME_LIMIT (100ms), do
+# `free(out); return xstrdup("")` -- so an over-budget expansion renders the
+# window list EMPTY while the status background remains. That is the blank bar.
+# The budget is WALL-CLOCK, not CPU time, so an unrelated load spike elsewhere on
+# the box can blank the bar even while tmux itself is idle. cba4ba9cd fixes it by
+# sampling the timer every FORMAT_TIME_LOOP_CHECK (10000) iterations instead.
+#
+# WHAT THIS LINE ACTUALLY DOES (load reduction, NOT a fix):
 # Claude Code and Codex animate a braille spinner in the *terminal title*, writing
-# OSC 2 ~10x/sec per pane. tmux's OSC 0/2 handler calls server_status_window(),
-# which dirties the status line of EVERY client in EVERY session holding that
-# window; status_redraw() then re-expands the entire status-format (the #{W:} loop
-# over every window, powerline styles and all) on each tick before discovering
-# nothing changed. With ~9 agent panes over 2 sessions and 4 attached clients the
-# single-threaded server averaged 38% CPU for days. Worse, the byte flood trips
-# tty_block_maybe() (>80KB queued at 197x51), which evbuffer_drain()s the *whole*
-# pending buffer -- including the status repaint that had just blanked the line --
-# then waits 100ms: that is the blank/flashing window list. This is a *separate*
-# mechanism from the ?2026 sync fix above, which remains necessary.
-# Measured interleaved A/B on the live server: 11.6% -> 3.2% server CPU.
-# Pane titles are not rendered anywhere here (pane-border-status is off), so
-# nothing visible is lost. Revert with: tmux set -gw allow-set-title on
+# OSC 2 ~10x/sec per pane. input.c gates that on allow-set-title; each write calls
+# server_status_window(), dirtying the status line for every client in every
+# session holding the window, and status_redraw() then re-expands the whole
+# status-format. Disabling titles cuts that redraw rate. Interleaved A/B on the
+# live server, tmux 3.7b, 9 agent panes: 13.8% -> 3.2% server CPU.
+# It does NOT stop the blanking: recurrence observed 2026-07-25 at load ~50 with
+# this setting already active. Only the tmux upgrade fixes that.
+#
+# COST: choose-tree (prefix+s / prefix+w) annotates panes with the pane title via
+# tmux's built-in WINDOW_TREE_DEFAULT_FORMAT (window-tree.c). With titles frozen
+# those annotations collapse, and since automatic-rename-format names every agent
+# window "#h:claude", the picker's entries become indistinguishable. Pane borders
+# are unaffected (pane-border-status is off).
+#
+# FLEET: this file syncs to every host. Inert where no agent TUIs run; the
+# choose-tree cost applies everywhere. Needs tmux >= 3.5 (option added in 3.5).
+# Revert with: tmux set -gw allow-set-title on
 setw -g allow-set-title off
 
 # Show hostname:command in window titles
