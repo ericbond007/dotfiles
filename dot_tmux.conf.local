@@ -415,6 +415,23 @@ set -s set-clipboard on
 # ?2026 every frame. Triggered by the 3.6b->3.7 upgrade on 2026-06-26.
 set -as terminal-features ',xterm-kitty:sync'
 
+# -- agent-TUI status-bar thrash (2026-07-25) ---------------------------------
+# Claude Code and Codex animate a braille spinner in the *terminal title*, writing
+# OSC 2 ~10x/sec per pane. tmux's OSC 0/2 handler calls server_status_window(),
+# which dirties the status line of EVERY client in EVERY session holding that
+# window; status_redraw() then re-expands the entire status-format (the #{W:} loop
+# over every window, powerline styles and all) on each tick before discovering
+# nothing changed. With ~9 agent panes over 2 sessions and 4 attached clients the
+# single-threaded server averaged 38% CPU for days. Worse, the byte flood trips
+# tty_block_maybe() (>80KB queued at 197x51), which evbuffer_drain()s the *whole*
+# pending buffer -- including the status repaint that had just blanked the line --
+# then waits 100ms: that is the blank/flashing window list. This is a *separate*
+# mechanism from the ?2026 sync fix above, which remains necessary.
+# Measured interleaved A/B on the live server: 11.6% -> 3.2% server CPU.
+# Pane titles are not rendered anywhere here (pane-border-status is off), so
+# nothing visible is lost. Revert with: tmux set -gw allow-set-title on
+setw -g allow-set-title off
+
 # Show hostname:command in window titles
 set -g automatic-rename-format '#h:#{pane_current_command}'
 
