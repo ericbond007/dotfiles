@@ -90,6 +90,26 @@ Silent scheduled-job death is a recurring fleet failure class (config-backup dar
 
 Why the watchdog is necessary: `node_systemd_timer_last_trigger_seconds` is **not collected** (node-exporter's systemd collector excludes `.timer` units), and `SystemdUnitFailed` only catches `failed`, not `inactive`. The watchdog's textfile metrics (`systemd_timers.prom`) are what actually cover timer liveness.
 
+## 5. Alerting about the alerting path itself — `severity: critical` is MANDATORY
+
+**If the thing you are alerting *about* is part of the delivery path, `severity: warning` sends the alert to the broken component.**
+
+In wanda's `alertmanager.yml` the `warning` tier matches **only** the two `incident-triage` routes — and incident-triage delivers **through The Claw (openclaw)**. So a warning-tier "The Claw is down" alert is handed to the dead component and never arrives. `severity: critical` additionally matches the third route, which has **no `receiver:`** and therefore inherits the parent `email` receiver — the only escape path that does not touch openclaw.
+
+Applies to any alert on openclaw, incident-triage-receiver, Alertmanager itself, or the mail path.
+
+**Origin (2026-07-26):** The Claw could not reach any model for ~7.5h. `openclaw.service` reported `active (running)` with `NRestarts=0` the whole time, so systemd, the timer watchdog and Prometheus all saw it healthy while Alertmanager delivered **53 webhooks** into a component that could act on none of them. Nothing noticed until Dave asked. → `ClawAllModelsFailed` + `ClawSilent` in `/opt/services/loki/rules/fake/openclaw.yml` (VK #1956).
+
+### Three traps when writing a log-based alert
+
+- **Grep-based alerts self-trigger.** sudo command-audit lines echo the command text into the journal, so investigating with `journalctl | grep "<the alert phrase>"` fires your own alert. Scope to the `unit` **and** add `!= "COMMAND="` — `KernelOOMOrPanic` carries this guard after a real false page on 2026-06-15.
+- **Use `absent_over_time(...)`, never `== 0`,** for "no logs at all": an empty stream returns **no series**, so `== 0` can never match.
+- **A `/health` endpoint can return 200 while the service is functionally dead.** openclaw's did, throughout the outage. Verify the health check actually reflects the failure mode you care about before wiring it.
+
+**Prefer alerting on the failure line over staleness.** A "time since last success" heartbeat was rejected for The Claw: measured cadence was only ~3 heartbeats/24h plus sparse user traffic, so any false-positive-safe threshold would have been slower than the outage it was meant to catch.
+
+**Loki rules live in `/opt/services/loki/rules/fake/*.yml`** (owned `loki:loki`), ruler → `host.docker.internal:9093`. Restart `loki-loki-1` to load, then confirm at `/prometheus/api/v1/rules` that the group shows `health=ok` — a rule file that exists but is not evaluated is worthless. **Prove a new rule would have caught the incident** by replaying its expr over the incident window with `query_range`.
+
 ## Done checklist for a new service
 
 - [ ] blackbox probe added (`http_site`, or a content module if it can 200-but-break)
@@ -98,4 +118,5 @@ Why the watchdog is necessary: `node_systemd_timer_last_trigger_seconds` is **no
 - [ ] dedicated exporter added only if metrics warrant it (else cAdvisor covers it)
 - [ ] any new timer: `enable --now` + `is-active` confirmed + added to watchdog CRITICAL if critical
 - [ ] `/opt/services` changes committed per-service (NOT `git add -A`)
+- [ ] if the alert is *about the delivery path* (openclaw / incident-triage / Alertmanager / mail): `severity: critical`, or it routes to the broken component (§5)
 - [ ] service page updated on the ops wiki (see `reading-writing-the-ops-wiki`)
