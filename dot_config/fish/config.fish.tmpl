@@ -33,7 +33,11 @@ function fuking_do_it
     echo $history[1]
 end
 abbr -a !! --function fuking_do_it
-{{ if eq .chezmoi.hostname "serpentii" }}
-# OpenClaw Completion
-test -f "/home/eric/.openclaw/completions/openclaw.fish"; and source "/home/eric/.openclaw/completions/openclaw.fish"
-{{ end }}
+# OpenClaw Completion. Unconditional on purpose: the `test -f` already makes this
+# a no-op on hosts without openclaw, so a hostname gate was redundant AND had to be
+# edited for every new openclaw host. It was gated to serpentii only, so when
+# openclaw's installer appended these lines to wanda's live config the result was
+# chezmoi drift that blocked EVERY sync to that host until 2026-07-28.
+# $HOME rather than a hardcoded /home/eric: identical for eric, correct for any
+# other user whose fish would otherwise source eric's completions.
+test -f "$HOME/.openclaw/completions/openclaw.fish"; and source "$HOME/.openclaw/completions/openclaw.fish"
