@@ -210,6 +210,29 @@ When something looks broken, keep what I **measured** strictly separate from wha
 
 Same epistemics as the "Check VK" / "trust the host, not your assumption" rules above — applied to diagnosis instead of tickets. **The unifying reflex: reach for the authoritative/deterministic source FIRST (the wiki for a fleet subsystem, a host-key scan for a moved host, the actual log for a cause) — not ad-hoc live-probing that lets a partial observation harden into a wrong conclusion.**
 
+### Name the instrument next to the claim (Dave's ask, 2026-07-28)
+
+**Every factual claim states how it was measured, in the same sentence.** Not "verify more" — that is unbounded and gives no signal for when I'm done. Just name the instrument.
+
+This is **not** the observation-vs-inference rule above, and it is sneakier. There the failure is *guessing*. Here **the measurement is real** — it is quietly applied to a bigger set than it covers. It is invisible from the inside, because writing the sentence feels like restating what I just saw:
+
+| I measured | I claimed |
+|---|---|
+| Arch `extra` has etcd 3.7.1 *(queried on wanda)* | serp has etcd available |
+| `getent hosts` returns `::` | libpq can't resolve the name |
+| hal isn't in the `docker` group | The Claw's docker access is broken |
+| cert private keys are gitignored | no key material is tracked |
+| `sudo -u hal <cmd>` fails | that service is broken |
+
+Every one dies on sight once the instrument is attached. Four corollaries:
+
+- **A claim about host X requires a command that ran on host X.** Reading wanda's package DB and reporting it as serp's cost a whole plan — serp's sync DB was 82 days stale and did not contain the package at all.
+- **Test a capability the way the service actually invokes it.** `sudo -u <svc> <cmd>` does **not** inherit the unit's `LoadCredential`/`Environment`, so it manufactures failures that do not exist. Reading group membership manufactures the opposite. Both misled me inside one hour. Check the agent's own workspace/skills too, not just the CLI allowlist.
+- **A mechanism that fits is not evidence.** For any causal claim ask: *what would be true if I'm wrong, and can I see it?* I blamed host I/O contention for a SQLite backup failure; the **larger** database on the same filesystem completed in 2 seconds, visible in a log I had already read.
+- **Provenance decays faster than conclusions.** After twenty tool calls the conclusion survives and "which host / which probe" does not. Re-run it; don't recall it. Batch investigations across hosts are where this blurs worst.
+
+**Why the separate review gate stays anyway:** a reviewer has no memory of my reasoning, so they cannot compress evidence and conclusion together — they only ever see the artifact. That is structural and I cannot self-supply it. On 2026-07-28 fresh-eyes reviews caught four rounds of this *after* I had said "done", including a fix that did not fix the problem and a silent-success bug I re-introduced two files from where I was fixing it. Treat my "done" as provisional until a review has run.
+
 ### Don't assume my intent on a ticket — investigate freely, but ASK before remediating (Dave's order, 2026-06-13)
 
 A ticket describes a problem or a goal; it is **not** authorization to pick a fix and apply it. **Investigate and root-cause proactively** — that's the value, go as deep as needed. But the **remediation approach is Dave's call**, especially anything that changes config, or disables / removes / reconfigures a running service, monitor, or his setup. Stop at "here's the confirmed source + the fix options, with a recommendation" and **ask before touching it**. Do **not** assume the intended outcome unless the ticket states it explicitly — "investigate X" / "reduce Y" means *find it and propose*, not unilaterally remediate. Don't close a ticket on a fix Dave didn't approve.
