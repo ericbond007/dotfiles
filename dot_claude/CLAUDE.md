@@ -243,6 +243,24 @@ Every one dies on sight once the instrument is attached. Four corollaries:
 
 **Why the separate review gate stays anyway:** a reviewer has no memory of my reasoning, so they cannot compress evidence and conclusion together — they only ever see the artifact. That is structural and I cannot self-supply it. On 2026-07-28 fresh-eyes reviews caught four rounds of this *after* I had said "done", including a fix that did not fix the problem and a silent-success bug I re-introduced two files from where I was fixing it. Treat my "done" as provisional until a review has run.
 
+### The instrument must be able to say NO (Dave's order, 2026-08-16, after one wrong claim too many)
+
+**Before running a verification, state what I will see if I am RIGHT and what I will see if I am WRONG. If those are the same observation, it is not a test — do not run it, and never cite it as confirmation.**
+
+This is the missing half of "name the instrument" above, and it is why that rule alone did not hold. Naming an instrument does not make it **discriminating**. I can satisfy the earlier rule perfectly — print the exact command next to the claim — and still be wrong, because the command could not have produced a disconfirming result.
+
+**Origin, 2026-08-16 (the wanda post-outage session).** I converted several `*-connect` units, ran `systemctl start <unit>` on three of them, saw the container IDs unchanged, and reported *"verified correct no-op."* But those units are `Type=oneshot` + `RemainAfterExit=yes`, and **`systemctl start` on an already-active oneshot does not run the unit at all** — so "unchanged" was guaranteed regardless of whether my change worked. I then built the next conclusion on that foundation (that `docker compose up -d` ignores `env_file` drift) and was wrong again. `systemctl restart` was the discriminating instrument, and it showed the opposite: compose *does* act on env drift. Two stated findings, both false, from one non-test. Dave: *"why does this keep happening? maybe check things before you speak?"*
+
+The discipline, concretely:
+
+- **Write the failing branch first.** *"If the unit ran, the container ID changes; if it silently didn't run, the ID is also unchanged — so ID-unchanged proves nothing."* Writing that sentence kills the bad test before it is quoted.
+- **A passing check that cannot fail is worse than no check**, because it is quoted as evidence. Suspect any verification that came back clean on the first try.
+- **Normalising the data can destroy the very signal being tested.** Comparing two secrets, I stripped quotes with `tr -d` before hashing and reported "identical" — the difference I was hunting lived in what I had stripped. Diff raw first; normalise only after a mismatch, to explain it.
+- **Re-measure, never recall, for anything stated in the present tense.** A ticket, a memory note, or my own finding from earlier in a long session is a *snapshot*. I told Dave "the drift detector has been broken for days" straight from a ticket written three weeks earlier; it had in fact run clean for seven consecutive nights. Re-run before asserting **now**.
+- **Label MEASURED vs INFERRED inline** while narrating. Thinking out loud is useful; the failure is that hypotheses arrive in the same register as findings and get read as conclusions.
+
+**The counter-weight, so this does not become paralysis:** the same check-as-I-go habit caught three real landmines in that session (the `vikunja`, `tandoor` and `jail-web` templates, each of which would have broken a live service on next recreate). The fix is **not** to check less or to stop narrating. It is to make the check able to fail, and to run it *before* speaking rather than after being caught.
+
 ### Don't assume my intent on a ticket — investigate freely, but ASK before remediating (Dave's order, 2026-06-13)
 
 A ticket describes a problem or a goal; it is **not** authorization to pick a fix and apply it. **Investigate and root-cause proactively** — that's the value, go as deep as needed. But the **remediation approach is Dave's call**, especially anything that changes config, or disables / removes / reconfigures a running service, monitor, or his setup. Stop at "here's the confirmed source + the fix options, with a recommendation" and **ask before touching it**. Do **not** assume the intended outcome unless the ticket states it explicitly — "investigate X" / "reduce Y" means *find it and propose*, not unilaterally remediate. Don't close a ticket on a fix Dave didn't approve.
