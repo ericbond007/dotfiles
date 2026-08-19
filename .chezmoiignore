@@ -16,11 +16,3 @@
 .local/share/legion-flattop
 .local/share/legion-flattop/**
 {{ end -}}
-
-# serp is in a bad state and must NOT receive ~/.claude config for now
-# (Dave's call, 2026-07-01 — a HAL session restored it uninvited that day and
-# had to revert). Remove this block only when Dave gives the all-clear.
-{{ if eq .chezmoi.hostname "serpentii" -}}
-.claude
-.claude/**
-{{ end -}}
