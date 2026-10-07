@@ -39,7 +39,7 @@ Predictable layout — guess the path by topic before searching:
 
 - **`architecture/`** — fleet-level "how does X work": overview · dns · tls · traefik · docker-networking · watchdogs · identity · backup-pipeline · ha-failover · vlans(planned).
 - **`runbooks/`** — "how to perform operation Y": known-incidents · opt-services-restore · postgres-major-upgrade · docker-address-pool-migration · ha-control · fleet-debug · energy · openclaw-models-cost · signal-channel · music-library · media-{automation,indexers-prowlarr,import-troubleshooting} · slskd-soularr.
-- **`hosts/`** — one page per host: wanda · serp · balganor · living-pi · flattop · bondo.
+- **`hosts/`** — one page per host: wanda · serp · balganor · living-pi · flattop · bondo (dead, decommissioned 2026-10-07 — historical page).
 - **`services/`** — one page per service at `services/<name>.md` (authelia, lldap, jail, ntfy, matrix, element, openclaw, homeassistant, media, books, pihole, homepage, netscan, email, music-search, navidrome, ups, meters, …). Start at `services/index.md` (the service map).
 - **`howto/`** — add-service · secrets-management · config-version-control · external-access · troubleshooting.
 - **`reference/`** — **incidents** (append here after a maintenance/incident pass) · security · backups · config-files · ports · devices · aws.

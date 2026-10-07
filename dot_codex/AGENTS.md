@@ -74,8 +74,10 @@ Never expose secret values in arguments, logs, files, tickets, or memory.
   fish login shell. Its missing Claude config is deliberate until Dave says
   otherwise.
 - **balganor** (`10.0.0.8`): media NAS and sync peer; bash; no Claude Code.
-- **living-pi** (`10.0.0.10`): HA/DNS failover peer; no Claude Code.
-- **bondo** (`10.0.0.11`): CachyOS transcription worker.
+- **living-pi** (`10.0.0.10`): UPS monitoring + SDR; retired from HA/DNS
+  standby 2026-08-22/23; no Claude Code.
+- **bondo** (`10.0.0.11`): DEAD — decommissioned 2026-10-07 (last seen
+  2026-09-04). Its standby/replica/transcriber roles are vacant; do not use it.
 
 Most custom services live on wanda. `/etc` is etckeeper-managed; `/opt/services`
 is a separate root-owned Git repository. Never use `git add -A` there. After
