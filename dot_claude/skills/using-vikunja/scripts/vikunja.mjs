@@ -365,7 +365,8 @@ try {
         const log = execFileSync(
           'git',
           ['log', options.rev ?? 'master', '--format=%s%n%b'],
-          { cwd: options.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+          // 256 MiB: a 2.3 MiB fireLake log exceeded Node's 1 MiB default maxBuffer → ENOBUFS (2026-10-09).
+          { cwd: options.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 },
         );
         shipped = new Set([...log.matchAll(/#(\d+)/g)].map((match) => Number(match[1])));
       }
