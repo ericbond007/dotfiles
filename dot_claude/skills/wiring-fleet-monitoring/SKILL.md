@@ -19,7 +19,7 @@ When you stand up a new service, wire it into monitoring **before** calling it d
 - **blackbox-exporter = the single synthetic-check ALERT source.** `probe_success == 0` routes through Alertmanager → **email** (The Claw is dead: its `incident-triage` routes were removed on 2026-10-21, and `warning` and `critical` both email now). This is the one alert engine.
 - **Uptime Kuma = status-page UI ONLY** (`uptime.ericbond.net`). It does **NOT** drive alerts. Do not re-add a Kuma→Prometheus alert rule — that double-alerts (`KumaMonitorDown` was removed for this reason).
 
-Both do "is it up" synthetic checks; running both as alert engines was redundancy that got removed. Blackbox wins as the engine (Grafana history, cert-expiry, content-matching, already wired to triage); Kuma's value is just the human dashboard.
+Both do "is it up" synthetic checks; running both as alert engines was redundancy that got removed. Blackbox wins as the engine (Grafana history, cert-expiry, content-matching, already wired to triage); Kuma's value is just the human dashboard.  *(2026-10-21: "triage" here means the Alertmanager → email path; The Claw is dead.)*
 
 Config lives under `/opt/services` — **commit per-service** with `sudo git -C /opt/services`, **never `git add -A`** (see the `deploying-wanda-services` skill for the monorepo git discipline). Gitignore any data/secret files before committing.
 
@@ -94,7 +94,7 @@ Why the watchdog is necessary: `node_systemd_timer_last_trigger_seconds` is **no
 
 **If the thing you are alerting *about* is part of the delivery path, `severity: warning` sends the alert to the broken component.**
 
-> **2026-10-21: The Claw is dead** and the two `incident-triage` routes are gone from `alertmanager.yml` — `warning` now falls through to the root `email` receiver exactly like `critical` (bondo and living-pi non-critical → `null`). The paragraph below describes the pre-2026-10-21 topology; its principle — an alert about the delivery path must not depend on that path — still applies to the mail path (postfix, Alertmanager itself).
+> **2026-10-21: The Claw is dead** and the two `incident-triage` routes are gone from `alertmanager.yml` — `warning` now falls through to the root `email` receiver (24 h repeat); `critical` still takes its own child route (10 s wait, 6 h repeat). Exceptions: bondo and living-pi non-critical → `null`. Email is now the ONLY delivery path — there is no escape path for an alert about the mail path itself; `AlertmanagerEmailDeliveryFailing` (`rules/alertmanager.yml`) watches it but can only page through it. The paragraph below describes the pre-2026-10-21 topology; its principle — an alert about the delivery path must not depend on that path — still applies to the mail path (postfix, Alertmanager itself).
 
 In wanda's `alertmanager.yml` the `warning` tier matches **only** the two `incident-triage` routes — and incident-triage delivers **through The Claw (openclaw)**. So a warning-tier "The Claw is down" alert is handed to the dead component and never arrives. `severity: critical` additionally matches the third route, which has **no `receiver:`** and therefore inherits the parent `email` receiver — the only escape path that does not touch openclaw.
 
