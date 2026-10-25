@@ -57,6 +57,8 @@ Use the matching installed skill before improvising:
 - Monitoring, blackbox, Kuma, exporters, or timer liveness:
   `wiring-fleet-monitoring`.
 - Fleet hooks: `writing-fleet-hooks`.
+- Reviewing any non-code artifact or finding before it is presented or
+  recorded: `review-design`.
 - Fleet/service email: `sending-email-programmatically`; personal Gmail:
   `sending-gmail`.
 - Hoosier Trail visual assets: `hoosiertrail-render-pipeline`.
@@ -71,18 +73,24 @@ Never expose secret values in arguments, logs, files, tickets, or memory.
 - **wanda** (`10.0.0.7`): primary services host; `/opt/services`, the ops wiki,
   identity, monitoring, databases, mail, and Home Assistant.
 - **serp / serpentii** (`10.0.0.9`): Arch/KDE host, backup target, GPU worker;
-  fish login shell. Its missing Claude config is deliberate until Dave says
-  otherwise.
+  fish login shell. Full fleet member again since 2026-08-19 (Claude + shared
+  config apply). Kernel held at 6.19.11 (`IgnorePkg = linux linux-headers`):
+  any kernel bump needs the nvidia-580xx DKMS rebuild verified before reboot.
 - **balganor** (`10.0.0.8`): DEAD — decommissioned 2026-10-25 (last seen on
   the LAN 2026-07-21; cause never established). Was a media NAS + sync peer.
   Do not ssh, sync to or mount it; wiki `reference/incidents.md` → 2026-10-25.
 - **living-pi** (`10.0.0.10`): UPS monitoring + SDR; retired from HA/DNS
-  standby 2026-08-22/23; no Claude Code.
+  standby 2026-08-22/23; no Claude Code. ⚠️ Its SD card is failing; an
+  ext4 read error aborted the journal on 2026-08-22 and `/` has been read-only
+  (`emergency_ro`) since, so writes, including `chezmoi update`, fail there
+  (wiki `hosts/living-pi.md`).
 - **bondo** (`10.0.0.11`): DEAD — decommissioned 2026-10-07 (last seen
   2026-09-04). Its standby/replica/transcriber roles are vacant; do not use it.
 
-Most custom services live on wanda. `/etc` is etckeeper-managed; `/opt/services`
-is a separate root-owned Git repository. Never use `git add -A` there. After
+Most custom services live on wanda. On wanda, serp and living-pi `/etc` is
+etckeeper-managed (flattop's is not; living-pi's cannot take new commits while
+its root fs is read-only); `/opt/services` is a separate root-owned
+Git repository. Never use `git add -A` there. After
 system changes, commit the correct config repository and update the wiki.
 
 ## Concurrent-agent and version-control safety
@@ -109,6 +117,12 @@ system changes, commit the correct config repository and update the wiki.
   not write the change when the runtime permits delegation; fix findings and
   re-review. If delegation is unavailable, perform a clearly separated second
   pass and disclose that limitation.
+- The same separate review applies, automatically, to everything else you
+  produce (Dave, 2026-10-18): specs, plans, runbooks, units, templates, rules,
+  hooks, skills, guidance edits, and any finding before it becomes a ticket,
+  wiki entry, or memory. Use the `review-design` skill — its small/trivial
+  lanes and its exit (a pass with nothing material, or three passes with no
+  blocker) apply.
 - For user-facing UI work, inspect the result visually. For services, verify the
   live behavior—not merely process status. New services require monitoring
   before they are complete.

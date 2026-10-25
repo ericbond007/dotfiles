@@ -14,7 +14,8 @@ self=$(hostname -s)
 # the WAN IP (router/dropbear) via DNS — `serpentii` and 10.0.0.10 force
 # the LAN path so we sync the actual boxes, not the gateway. bondo was
 # removed 2026-10-07: the host is dead (last seen 2026-09-04), not returning.
-peers=(serpentii wanda flattop balganor 10.0.0.10)
+# balganor was removed 2026-10-25: dead too (last seen 2026-07-21).
+peers=(serpentii wanda flattop 10.0.0.10)
 
 printf '=== chezmoi fleet sync from %s at %s ===\n' "$self" "$(date -Iseconds)"
 
