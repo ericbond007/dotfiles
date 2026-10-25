@@ -1,11 +1,11 @@
 ---
 name: fleet-sync-architecture
-description: Use when debugging or reasoning about how the fleet (flattop/wanda/serp + balganor/living-pi as agent-less peers; bondo is dead) shares Claude Code and Codex configuration via chezmoi, including what is canonical, what is per-host, shared skills/hooks, why an edit did or did not propagate, or onboarding a new host. Reference for the chezmoi+GitHub topology; not needed for routine edits.
+description: Use when debugging or reasoning about how the fleet (flattop/wanda/serp + living-pi as an agent-less peer; bondo and balganor are dead) shares Claude Code and Codex configuration via chezmoi, including what is canonical, what is per-host, shared skills/hooks, why an edit did or did not propagate, or onboarding a new host. Reference for the chezmoi+GitHub topology; not needed for routine edits.
 ---
 
 # Fleet sync architecture
 
-The fleet (flattop/wanda/serp, plus balganor and living-pi as Claude-Code-less sync peers) shares configuration via **chezmoi** with **GitHub as the hub**. This is what makes "edit on one machine, see it everywhere" work. For the day-to-day edit→commit→push→peer-apply flow, use the `chezmoi-sync` skill/command; for adding or changing a hook, use `writing-fleet-hooks`. This skill is the underlying topology reference.
+The fleet (flattop/wanda/serp, plus living-pi as a Claude-Code-less sync peer; balganor was one until it died — last seen 2026-07-21, decommissioned 2026-10-25) shares configuration via **chezmoi** with **GitHub as the hub**. This is what makes "edit on one machine, see it everywhere" work. For the day-to-day edit→commit→push→peer-apply flow, use the `chezmoi-sync` skill/command; for adding or changing a hook, use `writing-fleet-hooks`. This skill is the underlying topology reference.
 
 ## What lives where
 

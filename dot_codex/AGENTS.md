@@ -73,7 +73,9 @@ Never expose secret values in arguments, logs, files, tickets, or memory.
 - **serp / serpentii** (`10.0.0.9`): Arch/KDE host, backup target, GPU worker;
   fish login shell. Its missing Claude config is deliberate until Dave says
   otherwise.
-- **balganor** (`10.0.0.8`): media NAS and sync peer; bash; no Claude Code.
+- **balganor** (`10.0.0.8`): DEAD — decommissioned 2026-10-25 (last seen on
+  the LAN 2026-07-21; cause never established). Was a media NAS + sync peer.
+  Do not ssh, sync to or mount it; wiki `reference/incidents.md` → 2026-10-25.
 - **living-pi** (`10.0.0.10`): UPS monitoring + SDR; retired from HA/DNS
   standby 2026-08-22/23; no Claude Code.
 - **bondo** (`10.0.0.11`): DEAD — decommissioned 2026-10-07 (last seen

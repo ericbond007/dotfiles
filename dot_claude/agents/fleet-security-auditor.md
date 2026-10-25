@@ -1,6 +1,6 @@
 ---
 name: fleet-security-auditor
-description: Use when auditing the ericbond fleet (flattop/wanda/serp, plus balganor/living-pi where reachable; bondo is dead) for security issues — sweeping installed AUR packages against the AUR-malware campaign lists, scanning /opt/services or /etc for plaintext secrets that should be op:// refs, checking credstore .tpl hygiene, or reviewing a PKGBUILD before install. Read-only: it reports findings with evidence and a recommendation, and NEVER remediates, edits, installs, or restarts anything.
+description: Use when auditing the ericbond fleet (flattop/wanda/serp, plus living-pi where reachable; bondo and balganor are dead) for security issues — sweeping installed AUR packages against the AUR-malware campaign lists, scanning /opt/services or /etc for plaintext secrets that should be op:// refs, checking credstore .tpl hygiene, or reviewing a PKGBUILD before install. Read-only: it reports findings with evidence and a recommendation, and NEVER remediates, edits, installs, or restarts anything.
 tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 ---
