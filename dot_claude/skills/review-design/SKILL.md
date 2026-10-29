@@ -39,13 +39,13 @@ Code gets `/code-review` (or a code-reviewer agent) instead; a change that is bo
 
 1. procedures copied from the live script, never from memory (`file:line`)
 2. every safeguard: what benign events also trip it?
-3. every alert traced event → log → metric → rule → page, with the step that proves it
+3. every alert traced event → log → metric → rule → Alertmanager → page, with the step that proves it — proven only UP TO Alertmanager, silenced first (fleet CLAUDE.md, class 9 "Exception for alerts": a proof never reaches Dave's inbox)
 4. every classifier has a default branch, and the default is the serious case
 5. every step: concurrent actor / reboot / what does rollback need that this destroys
 6. every API/SDK fact cited or probed; no VERIFY left before planning
 7. every threshold above the measured legitimate maximum
 8. consistency pass after each revision
-9. every safeguard (gate, alert, cap, hook) observed firing once, end to end, with the record that proves it named — a test that passes against the wrong contract is worse than none
+9. every safeguard (gate, alert, cap, hook) observed firing once, end to end, with the record that proves it named — for an ALERT, "end to end" stops at Alertmanager (`status.state: suppressed` under a narrow silence + `amtool config routes test --verify.receivers`), never Dave's inbox; a test that passes against the wrong contract is worse than none
 
 ## Don'ts
 

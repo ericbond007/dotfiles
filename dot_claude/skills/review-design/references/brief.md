@@ -18,13 +18,13 @@ FACTS ALREADY MEASURED (trust these): [list]
 CHECK, SPECIFICALLY:
 1. Is every procedural step copied from the script/unit/template that performs it today? Cite `file:line` where the artifact disagrees with the live file.
 2. For every counter, threshold, cap, dead-letter or backstop: list the benign events that also trip it (outages, deadlines, retries, splits, reboots, limits). Would any of them cause data loss or a silent stop?
-3. For every alert or monitor: trace event → log line → metric → rule → page. Name the step in the plan that proves it fires. Then ask: in the runaway this alert exists for, is the signal still produced?
+3. For every alert or monitor: trace event → log line → metric → rule → Alertmanager → page. Name the step in the plan that proves it fires — and that proof must stop at Alertmanager under a silence put in BEFORE the firing (fleet CLAUDE.md class 9 "Exception for alerts"): a plan that emails Dave a test page is a finding, not a pass. Then ask: in the runaway this alert exists for, is the signal still produced?
 4. Every classifier / enumeration of cases: is there a default branch, and is the default the serious case? What falls through today?
 5. For every step of any sequence: what if another actor (concurrent session, cron, a reboot) acts between this step and the next? What does rollback need that this step destroys?
 6. Every API / SDK / library fact: is it cited to a doc section or measured? Flag anything assumed. Flag any "VERIFY" that must be resolved before planning.
 7. Every threshold: compute the legitimate maximum of the signal from measured numbers and check the threshold sits above it.
 8. Internal consistency after revisions: cross-references by name, numbers re-derived from the stated inputs, the facts section updated for every corrected fact.
-9. Every safeguard the artifact introduces or relies on (gate, alert, cap, hook, timeout): has it been observed firing once, end to end, and does the artifact name the record that proves it? A test that passes against the wrong contract is worse than none.
+9. Every safeguard the artifact introduces or relies on (gate, alert, cap, hook, timeout): has it been observed firing once, end to end, and does the artifact name the record that proves it? (For an alert, end to end stops at Alertmanager — `status.state: suppressed` with `status.silencedBy` = that silence's id under a narrow silence, plus `amtool config routes test --verify.receivers=<expected>` — never Dave's inbox.) A test that passes against the wrong contract is worse than none.
 10. [Artifact-specific checks: …]
 11. Anything else material. If nothing material remains, say "no material findings" and list only nits.
 
