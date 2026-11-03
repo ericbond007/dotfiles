@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse hook for Edit|Write|MultiEdit.
+# PostToolUse hook for Edit|Write (MultiEdit dropped 2026-11-03 — the tool no longer exists).
 #
 # Mirror Claude-driven changes into the chezmoi source tree:
 #   - File is already managed     → `chezmoi re-add` (capture modification)

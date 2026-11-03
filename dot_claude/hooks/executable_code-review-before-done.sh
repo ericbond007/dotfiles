@@ -37,7 +37,8 @@
 # Fail-open everywhere: any internal error allows the stop, never wedges a
 # session. Malformed transcript lines are skipped (fromjson?), not fatal.
 # An 8-block cap per session prevents loops; the cap resets whenever the gate
-# allows because a review landed after the last edit.
+# allows because a review landed after the last edit. When the cap trips, the
+# allow carries a visible systemMessage (2026-11-03) instead of passing silently.
 #
 # Override, POSITIONAL (not a session-wide off switch): an assistant Bash
 # tool_use whose command contains "claude-review-ok-<this session id>" counts
@@ -101,6 +102,8 @@ read -r last_edit last_review last_kind < <(
             or test("/(dot_claude|\\.claude)/.*settings\\.json$")));
     def artifact_edit($c):
       ($c.type? == "tool_use")
+      # MultiEdit kept ON PURPOSE (2026-11-03): the tool is gone from the matchers, but a --resume of a
+      # pre-removal session still carries MultiEdit edits in its transcript; do not "clean up" this regex.
       and (($c.name? // "") | tostring | test("^(Edit|Write|MultiEdit|NotebookEdit)$"))
       and (path_of($c) as $p | (reviewable($p) and (excluded($p) | not)));
     # A review action. Writer agents whose description says "implement ... review
@@ -154,8 +157,12 @@ if [ "$last_review" -gt "$last_edit" ]; then
   fi
   exit 0
 fi
-# Cap reached without an intervening review -> fail open rather than wedge.
-[ "$blocks" -ge 8 ] && exit 0
+# Cap reached without an intervening review -> fail open rather than wedge, but SAY SO
+# (2026-11-03): a silent cap looked exactly like a passed review in the transcript.
+if [ "$blocks" -ge 8 ]; then
+  jq -nc --arg n "$blocks" '{systemMessage:("review gate CAP reached: " + $n + " blocks in this session without a review — the gate is now OPEN (fail-open cap); a separate review is still owed for the last edit")}'
+  exit 0
+fi
 
 reason="FLEET MANDATE (Dave, 2026-10-18): code or a design/plan/runbook/ops artifact was written or modified this session, but no SEPARATE cold review has run after the last change. Everything gets reviewed automatically, without being asked. Before finishing: for CODE run /code-review (or dispatch a code-reviewer agent); for a spec, plan, runbook, unit, template, rule, hook, skill or CLAUDE.md change use the review-design skill (dispatch an Opus reviewer Agent with its brief; the DISPATCH is what this gate counts). Address the findings, re-review until a pass reports nothing material, then finish. Re-review after any fix that changes the artifact. Only if you GENUINELY already ran a separate review this session and this check missed it, or the edit is trivially not reviewable (a typo, a scratch file), override at this point with the Bash command (it is logged visibly):  echo claude-review-ok-${session}"
 

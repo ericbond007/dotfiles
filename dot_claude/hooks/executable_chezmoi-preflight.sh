@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook for Edit|Write|MultiEdit.
+# PreToolUse hook for Edit|Write (MultiEdit dropped 2026-11-03 — the tool no longer exists).
 # Warns (non-blocking) if the target file is chezmoi-related AND:
 #  - the chezmoi source is behind origin (risk of conflicts on next sync), or
 #  - the target file is generated from a template (user should edit the .tmpl

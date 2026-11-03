@@ -1,0 +1,9 @@
+# Targets chezmoi must REMOVE on every host (see chezmoi docs: .chezmoiremove).
+# 2026-11-03: the three legacy Bash-guard shims (exec wrappers onto bash-guards.sh since
+# 2026-07-01, kept only for sessions that had snapshotted the old registration).
+# Retire these three lines once every host that APPLIES (flattop/wanda/serp) shows the shims gone —
+# living-pi never applies (read-only root), its copies are harmless. Until then they also delete any
+# future file re-created at these paths on every apply; re-adding a same-named source would then error.
+.claude/hooks/aur-review.sh
+.claude/hooks/blast-radius.sh
+.claude/hooks/npm-install-review.sh

@@ -10,9 +10,8 @@ INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
-# Only check Edit/Write/MultiEdit tools (MultiEdit added 2026-07-01 for parity
-# with the chezmoi hooks' matcher — harmless on builds where it no longer exists)
-if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" && "$TOOL" != "MultiEdit" ]]; then
+# Only check Edit/Write tools (MultiEdit dropped 2026-11-03 — the tool no longer exists).
+if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" ]]; then
   exit 0
 fi
 

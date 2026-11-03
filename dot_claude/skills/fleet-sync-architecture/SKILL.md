@@ -27,8 +27,8 @@ The fleet (flattop/wanda/serp, plus living-pi as a Claude-Code-less sync peer; b
 
 ## Hooks that make it work
 
-- `chezmoi-preflight.sh` — **PreToolUse** on `Edit|Write|MultiEdit`. Warns on stderr if the chezmoi source is behind origin (cached 5-min fetch) or if you're editing a rendered target whose `.tmpl` you should edit instead.
-- `chezmoi-readd.sh` — **PostToolUse** on `Edit|Write|MultiEdit`. When the edited path is a chezmoi-managed target and not templated, runs `chezmoi re-add` so the source tree mirrors `$HOME`. (Editing the SOURCE tree directly is the reverse path — readd correctly no-ops there, so you must `chezmoi apply <target>` yourself.)
+- `chezmoi-preflight.sh` — **PreToolUse** on `Edit|Write`. Warns on stderr if the chezmoi source is behind origin (cached 5-min fetch) or if you're editing a rendered target whose `.tmpl` you should edit instead.
+- `chezmoi-readd.sh` — **PostToolUse** on `Edit|Write`. When the edited path is a chezmoi-managed target and not templated, runs `chezmoi re-add` so the source tree mirrors `$HOME`. (Editing the SOURCE tree directly is the reverse path — readd correctly no-ops there, so you must `chezmoi apply <target>` yourself.)
 - `bash-guards.sh` — **PreToolUse** on `Bash`, fleet-wide: the merged blast-radius / AUR-review / npm-review dispatcher (one process + one jq per Bash call; consolidated 2026-07-01).
 - Codex registers that same dispatcher from `~/.codex/hooks.json`, invoking `dot_claude/hooks/executable_bash-guards.sh` through Bash rather than assuming the rendered `~/.claude/hooks/` tree exists. The command verifies the source file's SHA-256 and exits 2 on mismatch, so script-content changes fail closed and require a matching registry update. The Bash payload and exit-2 block contract were verified compatible on Codex 0.145 (2026-07-23). Each new/changed hook definition must be reviewed in Codex `/hooks`.
 - `chezmoi-sync.sh` — **not registered as a hook**. Manually invoked (typically by Claude driving the workflow, sometimes via `/chezmoi-sync`). Refuses on a dirty tree, pushes `origin/master`, then ssh's each peer (self-excluded via `hostname -s`) to run `chezmoi update`.

@@ -25,7 +25,7 @@ report(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); s=ok; else fail=$((fail+1))
 chk(){ f="$T/$RANDOM$RANDOM.jsonl"; printf '%s\n' "$2" > "$f"; report "$1" "$(verdict "$(run "$f")")" "$3"; }
 chk_nonl(){ f="$T/$RANDOM$RANDOM.jsonl"; printf '%s' "$2" > "$f"; report "$1" "$(verdict "$(run "$f")")" "$3"; }
 bash -n "$H" || { echo "FAIL: bash syntax error in $H"; exit 1; }
-q="'"; if grep -q "$q" <(sed -n "/jq -nRr '/,/' \"\$transcript\"/p" "$H" | sed '1d;$d'); then echo "FAIL: stray single quote inside the jq program"; exit 1; fi
+q="'"; if grep -q "$q" <(sed -n "/jq -nRr /,/' \"\$transcript\"/p" "$H" | sed '1d;$d'); then echo "FAIL: stray single quote inside the jq program"; exit 1; fi
 # --- blocks
 chk "spec edited, no review"                      "$(edit /x/docs/superpowers/specs/2026-foo-design.md)"            BLOCK
 chk "plan edited, no review"                      "$(edit /x/docs/superpowers/plans/2026-foo.md)"                   BLOCK
@@ -101,7 +101,7 @@ report "override for this session -> allow" "$(verdict "$out")" allow
 report "override prints a visible systemMessage" "$(printf '%s' "$out" | jq -r '.systemMessage // "none"' | cut -c1-14)" "review gate OV"
 # --- cap and reset
 f="$T/cap.jsonl"; edit /x/src/a.ts > "$f"; export TMPDIR="$T"; echo 8 > "$T/claude-review-blocks-crbd-cap"
-r=$(printf '{"transcript_path":"%s","session_id":"crbd-cap"}' "$f" | bash "$H" 2>/dev/null); report "counter at 8, no review -> fail open" "$(verdict "$r")" allow
+r=$(printf '{"transcript_path":"%s","session_id":"crbd-cap"}' "$f" | bash "$H" 2>/dev/null); report "cap trip prints a visible systemMessage" "$(printf '%s' "$r" | jq -r '.systemMessage // "none"' | cut -c1-33)" "review gate CAP reached: 8 blocks"; report "counter at 8, no review -> fail open" "$(verdict "$r")" allow
 f3="$T/cap2.jsonl"; { edit /x/src/a.ts; agent 'Cold review of code'; } > "$f3"; echo 8 > "$T/claude-review-blocks-crbd-cap2"
 r=$(printf '{"transcript_path":"%s","session_id":"crbd-cap2"}' "$f3" | bash "$H" 2>/dev/null); report "counter at 8, review after edit -> counter removed" "$( [ -f "$T/claude-review-blocks-crbd-cap2" ] && echo kept || echo reset )" reset
 f4="$T/cap3.jsonl"; { edit /x/src/a.ts; agent 'Cold review of code'; edit /x/src/b.ts; } > "$f4"; echo 8 > "$T/claude-review-blocks-crbd-cap3"

@@ -23,7 +23,7 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 ## Hook script contract
 
 - **Input:** JSON on stdin. Relevant fields per event:
-  - `PreToolUse`/`PostToolUse`: `tool_name`, `tool_input.file_path` (Edit/Write/MultiEdit), `tool_input.command` (Bash), `cwd`
+  - `PreToolUse`/`PostToolUse`: `tool_name`, `tool_input.file_path` (Edit/Write; `NotebookEdit` sends `notebook_path` and is NOT covered by the blockers), `tool_input.command` (Bash), `cwd`
   - `Notification`: `message`, `title`, `notification_type`
   - `SessionEnd`: `session_id`, `cwd`, `reason`
 - **Exit codes:**
@@ -45,7 +45,9 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
   file's SHA-256 in the registered command and exits 2 on mismatch. After every
   registry, command, or pinned-script change, update the expected SHA-256, open
   `/hooks`, review the exact command, and trust it; verify without
-  `--dangerously-bypass-hook-trust`.
+  `--dangerously-bypass-hook-trust`. `hooks/tests/codex-hash-pin.test.sh` fails whenever the
+  source hash and the pin drift (even a comment edit does it, 2026-11-03) — run it before
+  committing any `bash-guards.sh` change.
 - Do **not** assume other hooks are portable. Codex file writes normally arrive
   as `apply_patch`, not Claude's `Edit`/`Write` `file_path` shape, and transcript
   JSONL is not a stable cross-product format. `chezmoi-preflight.sh`,
@@ -120,7 +122,7 @@ A hook entry is a JSON object inside its event's array. For shared entries, just
 
 ```jsonc
 "PreToolUse": [
-  { "matcher": "Edit|Write|MultiEdit",
+  { "matcher": "Edit|Write",
     "hooks": [{ "type": "command", "command": "~/.claude/hooks/shared.sh" }]
   }{{ if eq .chezmoi.hostname "wanda" }},
   { "matcher": "Bash",
@@ -135,7 +137,7 @@ The `{{ if ... }},` pattern puts the comma *inside* the conditional so the share
 
 | Intent | Matcher |
 |---|---|
-| Any file edit | `Edit\|Write\|MultiEdit` |
+| Any file edit | `Edit\|Write` (MultiEdit no longer exists; NotebookEdit is a separate tool) |
 | Shell commands only | `Bash` |
 | Everything | `*` (or omit — empty matcher matches all) |
 | Specific tool | exact name, e.g. `Read`, `Grep` |
