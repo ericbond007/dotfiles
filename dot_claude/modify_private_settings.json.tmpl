@@ -34,6 +34,10 @@
 # both sides), not a clean status. Reverting this commit + applying puts
 # flattop back in "default" mode — expected, not a new bug; Dave re-picks auto.
 #
+# security-guidance plugin seeded FALSE (Dave, 2026-11-03, aiImprove audit §3.6): one useful
+# injection in 1,422 transcripts vs seven Python spawns on most Bash calls; disabled live on
+# flattop/wanda/serp with `claude plugin disable … --scope user` (new sessions only).
+# Re-enable = `claude plugin enable …` per host; the seed only reaches fresh hosts.
 # jq is a documented fleet dependency (onboarding step 1); fail loudly if absent.
 set -eu
 
@@ -91,7 +95,7 @@ SEED='{
     "skill-creator@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true
   },
   "effortLevel": "high",
