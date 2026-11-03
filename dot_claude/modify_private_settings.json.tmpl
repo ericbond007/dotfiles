@@ -2,7 +2,7 @@
 # chezmoi modify_ script for ~/.claude/settings.json
 #
 # settings.json is CO-MANAGED: chezmoi must enforce the fleet-critical
-# `permissions` + `hooks` (incl. per-host hook blocks), but Claude Code
+# `permissions.allow` + `hooks` (incl. per-host hook blocks), but Claude Code
 # rewrites `enabledPlugins`, `effortLevel`, `editorMode`,
 # `remoteControlAtStartup`, `agentPushNotifEnabled`, `mcpServers`, ... at
 # runtime per host. A full-file template fights those runtime writes and
@@ -13,10 +13,26 @@
 # absent); our stdout becomes the new file. We:
 #   - seed the runtime keys from template defaults (fresh host only),
 #   - preserve whatever Claude Code wrote for them on existing hosts,
-#   - force `.permissions` and `.hooks` from the chezmoi-managed (templated,
-#     hostname-conditional) values every run.
+#   - force `.permissions.allow` and `.hooks` from the chezmoi-managed
+#     (templated, hostname-conditional) values every run;
+#   - force `.permissions.defaultMode` to "default" on every host EXCEPT
+#     flattop (Dave's pick, 2026-11-02, aiImprove audit §3.2): flattop runs
+#     Claude Code in "auto" mode by choice, and the old whole-object force
+#     silently reset it on every apply/sync. The service hosts stay pinned.
+#     The merge is a shallow jq `+`: every key MANAGED defines (`allow`, and a
+#     future `deny`) replaces the runtime value wholesale (arrays are not
+#     combined); keys MANAGED does not define (`deny`, `ask`,
+#     `additionalDirectories`, `disableBypassPermissionsMode`, …) are KEPT —
+#     note `additionalDirectories` widens access and now survives on service
+#     hosts too (accepted with this choice; it only appears via /add-dir).
+#     A non-object `.permissions` is treated as absent (`objects // {}`).
 # Per-host runtime permission grants belong in settings.local.json (not
-# chezmoi-tracked) per CLAUDE.md, so force-replacing .permissions is correct.
+# chezmoi-tracked) per CLAUDE.md, so force-replacing .permissions.allow is correct.
+# NOTE: on flattop `chezmoi status` shows this file as `MM` even when nothing
+# needs changing: Claude Code rewrites it in its own key order, we emit `jq -S`
+# sorted keys. The success test for this script is a SEMANTIC diff (`jq -S`
+# both sides), not a clean status. Reverting this commit + applying puts
+# flattop back in "default" mode — expected, not a new bug; Dave re-picks auto.
 #
 # jq is a documented fleet dependency (onboarding step 1); fail loudly if absent.
 set -eu
@@ -25,7 +41,6 @@ command -v jq >/dev/null 2>&1 || { echo "modify_settings.json: jq not found" >&2
 
 MANAGED='{
   "permissions": {
-    "defaultMode": "default",
     "allow": [
       "Bash(pacman *)",
       "Bash(ls *)",
@@ -38,7 +53,8 @@ MANAGED='{
       "Bash(echo *)",
       "Bash(tuned-adm *)",
       "Bash(grep *)"
-    ]
+    ]{{ if ne .chezmoi.hostname "flattop" }},
+    "defaultMode": "default"{{ end }}
   },
   "hooks": {
     "Notification": [
@@ -97,4 +113,4 @@ cur="$(cat)"
 printf '%s' "$cur" | jq -S \
   --argjson managed "$MANAGED" \
   --argjson seed "$SEED" \
-  '($seed * .) | .permissions = $managed.permissions | .hooks = $managed.hooks'
+  '($seed * .) | .permissions = (((.permissions | objects) // {}) + $managed.permissions) | .hooks = $managed.hooks'

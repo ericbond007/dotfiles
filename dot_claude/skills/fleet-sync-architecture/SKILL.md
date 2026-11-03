@@ -14,7 +14,7 @@ The fleet (flattop/wanda/serp, plus living-pi as a Claude-Code-less sync peer; b
 | `~/.local/share/chezmoi/` | chezmoi source tree (git repo) — the canonical state |
 | `github.com:ericbond007/dotfiles` | shared hub; configured peers push/pull from `origin/master` |
 | `~/.claude/hooks/*.sh` | rendered working copies (what Claude Code invokes) |
-| `~/.claude/settings.json` | co-managed by `dot_claude/modify_private_settings.json.tmpl` (modify_ script: chezmoi owns `hooks`+`permissions`, Claude Code owns runtime keys; hostname conditionals) |
+| `~/.claude/settings.json` | co-managed by `dot_claude/modify_private_settings.json.tmpl` (modify_ script: chezmoi owns `hooks` + `permissions.allow`, pins `permissions.defaultMode`=`default` off-flattop only; other `permissions.*` keys and the runtime keys are Claude Code's; hostname conditionals) |
 | `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/CLAUDE.md` | all chezmoi-tracked — same on every host |
 | `~/.claude/settings.local.json` | per-host permission overrides — **not** chezmoi-tracked |
 | `~/.claude/projects/.../memory/` | per-host memories — **not** chezmoi-tracked |

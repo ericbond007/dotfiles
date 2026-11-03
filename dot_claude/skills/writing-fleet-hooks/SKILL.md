@@ -15,7 +15,7 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 |---|---|
 | `~/.claude/hooks/<name>.sh` | Working copy on each host (what Claude Code runs) |
 | `~/.local/share/chezmoi/dot_claude/hooks/executable_<name>.sh` | Chezmoi source (tracked in git) |
-| `~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl` | Hostname-templated hook registry (modify_ script; owns `hooks`+`permissions`) |
+| `~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl` | Hostname-templated hook registry (modify_ script; owns `hooks` + `permissions.allow`, pins `permissions.defaultMode` off-flattop only; other `permissions.*` keys stay runtime) |
 | `~/.claude/settings.local.json` | Per-host permissions overrides (not chezmoi-tracked) |
 | `~/.codex/hooks.json` | Codex hook registry working copy |
 | `~/.local/share/chezmoi/dot_codex/hooks.json` | Codex hook registry source; shared scripts must not assume rendered Claude targets exist |
@@ -63,13 +63,14 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 4. **Render-check both branches.** The file is a modify_ SHELL script (not raw JSON), so render what apply would produce:
    ```bash
    chezmoi cat ~/.claude/settings.json | jq .   # this host's branch
-   # simulate another host's branch (e.g. wanda) against an empty settings file:
-   sed 's/eq .chezmoi.hostname "wanda"/eq "wanda" "wanda"/g' \
-     ~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl \
-     | chezmoi execute-template > /tmp/render-modify.sh
-   echo '{}' | sh /tmp/render-modify.sh | jq .
+   # simulate another host's branch (e.g. wanda) — override the hostname so EVERY
+   # hostname conditional (eq AND ne, e.g. the off-flattop defaultMode pin) renders as it would there:
+   chezmoi execute-template --override-data '{"chezmoi":{"hostname":"wanda"}}' \
+     < ~/.local/share/chezmoi/dot_claude/modify_private_settings.json.tmpl > /tmp/render-modify.sh
+   echo '{}' | sh /tmp/render-modify.sh | jq .                 # fresh host
+   ssh wanda 'cat ~/.claude/settings.json' | sh /tmp/render-modify.sh | jq .   # that host's live file
    ```
-   Both must emit valid JSON.
+   Both must emit valid JSON, and the live-file render must be semantically identical to the live file unless you meant to change it (`diff <(jq -S . live) <(… | jq -S .)`).
 5. **Chezmoi-add the script:**
    ```bash
    chezmoi add ~/.claude/hooks/<name>.sh
