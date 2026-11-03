@@ -39,7 +39,7 @@ Code gets `/code-review` (or a code-reviewer agent) instead; a change that is bo
 
 1. procedures copied from the live script, never from memory (`file:line`)
 2. every safeguard: what benign events also trip it?
-3. every alert traced event → log → metric → rule → Alertmanager → page, with the step that proves it — proven only UP TO Alertmanager, silenced first (fleet CLAUDE.md, class 9 "Exception for alerts": a proof never reaches Dave's inbox)
+3. every alert traced event → log → metric → rule → Alertmanager → page, with the step that proves it — proven only UP TO Alertmanager, silenced first (fleet CLAUDE.md, class 9 "Exception for alerts": a proof never reaches Dave's inbox, silence first; mechanics in the `wiring-fleet-monitoring` skill § 6)
 4. every classifier has a default branch, and the default is the serious case
 5. every step: concurrent actor / reboot / what does rollback need that this destroys
 6. every API/SDK fact cited or probed; no VERIFY left before planning

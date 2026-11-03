@@ -9,7 +9,8 @@ description: >-
   status-page UI ONLY, and enabled-but-inactive timers die silently. Trigger
   this whenever Dave mentions monitoring, alerting, blackbox, "wire it into
   the Claw / Alertmanager", a health check, an uptime monitor, a Prometheus
-  probe/exporter, or a systemd timer that must not silently die.
+  probe/exporter, or a systemd timer that must not silently die. Also holds
+  the recipe for PROVING an alert fires without emailing Dave (silence first; § 6).
 ---
 
 # Wiring a new service into fleet monitoring
@@ -112,8 +113,26 @@ Applies to any alert on openclaw, incident-triage-receiver, Alertmanager itself,
 
 **Loki rules live in `/opt/services/loki/rules/fake/*.yml`** (owned `loki:loki`), ruler → `host.docker.internal:9093`. Restart `loki-loki-1` to load, then confirm at `/prometheus/api/v1/rules` that the group shows `health=ok` — a rule file that exists but is not evaluated is worthless. **Prove a new rule would have caught the incident** by replaying its expr over the incident window with `query_range`.
 
+## 6. Proving an alert fires — without emailing Dave (silence first)
+
+*Moved from CLAUDE.md § "Plans that LAND", class 9 "Exception for alerts", 2026-11-03. The RULE stays in CLAUDE.md ("a proof never reaches Dave's inbox" — Dave, 2026-10-29 — and the "Silence first" line). This section is the full mechanics; the `review-design` brief checks for them.*
+
+- **Silence first.** Put a silence in place BEFORE the deliberate firing.
+  - Match the test firing's labels as narrowly as possible.
+  - Set `endsAt` just past the expected resolve, and extend it if the alert is still firing.
+  - Expire it only after `/api/v2/alerts` shows the alert resolved or gone. Expiring it while the alert still fires is a lapse.
+  - Put it in before the firing reaches Alertmanager: a new critical alert's first email goes out 10 s after it arrives.
+  - A silenced alert sends neither its firing email nor its "resolved" email.
+  - If the silence lapses while the alert is still firing, the group's next flush emails it, within 5 min (`group_interval`), whatever the severity. Nothing arriving 2 minutes after a lapse does not mean you're safe.
+  - A signal that stays up until a reset (e.g. a daily counter like `cap_hit_today`) can't be silenced both narrowly and briefly. Prove it with a test-only label instead of the real signal, or say plainly that the silence also hides any real hit until the reset.
+- **Then the proof, which stops at Alertmanager.** The alert appears in `/api/v2/alerts` with `status.state: suppressed` and `status.silencedBy` set to your silence's id. That is the pass: `active` means the silence missed and an email is coming. A brief `unprocessed` state right after arrival is normal, so poll for a moment.
+- **And the route.** Inside `alertmanager-alertmanager-1`, run `amtool config routes test --alertmanager.url=http://localhost:9093 --verify.receivers=<expected> <its full labelset>`. Copy the labels from the `/api/v2/alerts` entry, including `cluster`, `instance` and `job`. That entry's `receivers[].name` is a second, live check. It must exit 0. Without `--verify.receivers` it exits 0 even when it prints the wrong receiver.
+- **The email hop itself** is proven by real alerts arriving. `AlertmanagerEmailDeliveryFailing` watches only the Alertmanager → Postfix hand-off, and it pages through the very path it watches. No test page.
+- **Real problems still email as normal**, provided the silence stays narrow and short.
+
 ## Done checklist for a new service
 
+- [ ] if a proof firing is planned: alert proven under a narrow silence per § 6 — never Dave's inbox
 - [ ] blackbox probe added (`http_site`, or a content module if it can 200-but-break)
 - [ ] Prometheus + blackbox reloaded; probe shows up and `probe_success == 1`
 - [ ] Uptime Kuma monitor added (status page)
