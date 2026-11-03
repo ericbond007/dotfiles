@@ -1,5 +1,6 @@
+# Managed by chezmoi: dot_local/share/legion-flattop/ (since 2026-11-02) — edit the source, not this file
 [Unit]
-Description=Alert on legion-fan-curve.service failure
+Description=Alert when a Legion fan-curve unit fails (OnFailure= of legion-fan-curve and legion-fancurve-ac)
 ConditionVirtualization=!container
 
 [Service]

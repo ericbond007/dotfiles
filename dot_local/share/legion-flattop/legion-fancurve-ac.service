@@ -1,0 +1,27 @@
+[Unit]
+Description=Re-apply Legion custom fan curve (custom mode 255) on AC connect
+Documentation=https://github.com/johnfanv2/LenovoLegionLinux
+After=power-profiles-daemon.service
+# If the re-apply fails verification, fire the same alert the boot service uses.
+OnFailure=legion-fan-curve-alert.service
+
+[Service]
+Type=oneshot
+# On plug-in powerdevil may switch the PPD profile (its [AC] setting), and PPD
+# then writes powermode 1/2/3, dropping the EC off our curve. Settle a few
+# seconds so we run AFTER it, then re-assert powermode=255 + the custom curve.
+# Also started by PPD's ExecStartPost drop-in on every PPD start, AC or not.
+#
+# NOTE: 255 is CUSTOM mode, not Performance (3). It is NOT a downgrade: custom
+# mode carries the IDENTICAL power limits as performance (verified 2026-06-30:
+# CPU 70 W sustained / 88 W boost, GPU cTGP 10 / PPAB 15 in both). The only
+# difference is custom keeps our quiet fan curve instead of the stock one. So
+# this gives performance-tier power AND the safe curve — that is the whole point.
+ExecStartPre=/bin/sleep 3
+# 2026-10-09: retry in place. One verification lost to a concurrent PPD write is
+# not worth a critical "FAILED" popup; three in a row is. (legion-profile-watch
+# repairs profile changes independently; the script's flock serialises them.)
+ExecStart=/bin/sh -c 'for i in 1 2 3; do /opt/services/legion-flattop/bin/legion-fan-curve.sh && exit 0; sleep 3; done; exit 1'
+# Bounded: 3 x (60 s flock wait + ~10 s run) + sleeps. A hung run must not
+# wedge this unit forever.
+TimeoutStartSec=300

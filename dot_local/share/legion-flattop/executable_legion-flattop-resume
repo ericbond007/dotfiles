@@ -3,9 +3,9 @@
 #
 # Re-apply the EC custom fan curve after suspend / hibernate / hybrid-sleep.
 # The Legion 7 EC drops back to its stock "performance" curve on resume even
-# though powermode still reads as custom (3) — same shape as the original bug
-# we patched out. Without this hook, fans cap at PWM 114 (≈44%) until the next
-# reboot or manual `systemctl restart legion-fan-curve`.
+# though powermode still reads as custom (255) — same shape as the original bug
+# we patched out. Without this hook, fans would cap at PWM 114 (≈44%) until
+# legion-profile-watch's 5 s shape poll re-applies the curve.
 #
 # systemd-logind invokes this with $1 = pre|post and $2 = suspend|hibernate|
 # hybrid-sleep|suspend-then-hibernate. We only act on `post`.

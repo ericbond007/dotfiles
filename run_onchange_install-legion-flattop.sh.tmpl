@@ -1,62 +1,272 @@
-{{- /* NEUTRALISED 2026-11-02 (aiImprove audit §3.1): this script had been pending
-     since 2026-05-14 while the installed fan stack moved five rewrites ahead of
-     these May source copies; running it would downgrade legion-fan-curve.sh
-     (27 KB -> 6.5 KB) and restart the fan service. It now renders EMPTY on every
-     host (chezmoi skips empty scripts) until the back-port lands and this guard
-     is replaced by an idempotent installer. Reverting this commit re-arms the hazard. */ -}}
-{{- if false -}}
+{{- if eq .chezmoi.hostname "flattop" -}}
 #!/usr/bin/env bash
-# Installs the legion-flattop system files (kernel-module patcher, fan-curve
-# systemd unit, modprobe options, pacman hook) from the chezmoi-managed source
-# copies in ~/.local/share/legion-flattop/ to:
+# legion-flattop installer — deploys the fan-curve stack from the chezmoi SOURCE
+# dir (dot_local/share/legion-flattop/, the source of truth since 2026-11-02) to:
 #
-#   /opt/services/legion-flattop/bin/  — scripts (per fleet convention)
-#   /etc/modprobe.d/                   — kernel-module options (force=1)
-#   /etc/pacman.d/hooks/               — pacman PostTransaction hook
-#   /etc/systemd/system/               — boot-time fan-curve service
-#   /usr/lib/systemd/system-sleep/     — resume hook (re-applies curve after wake)
+#   /opt/services/legion-flattop/bin/              scripts + the profile-watch daemon
+#   /etc/systemd/system/                           six units + the PPD drop-in
+#   /etc/udev/rules.d/99-legion-fancurve-ac.rules  re-apply curve on AC plug-in
+#   /etc/modprobe.d/legion-laptop.conf             kernel-module options
+#   /etc/pacman.d/hooks/                           pacman PostTransaction hook
+#   /usr/lib/systemd/system-sleep/legion-flattop   re-apply curve after resume
 #
-# Re-runs whenever any tracked source changes (via the embedded checksums below).
-# Also handles migration from previous layouts:
-#   /usr/local/sbin/legion-{vpc2004-patch,fancontrol-setup}.sh   (very old)
-#   /opt/services/legion-laptop/                                 (intermediate)
+# Rev 2 (2026-11-02, after cold review pass 1 of the back-port plan). Properties:
+#  * Copies the exact bytes whose checksums triggered this run (SOURCE dir, not the
+#    rendered ~/.local/share copy — a `chezmoi apply --include=scripts` after a
+#    source edit therefore deploys that edit).
+#  * Two-phase: CLASSIFY (no writes) then ACT. A file is installed only when it
+#    differs from the source AND the installed copy is the one this installer
+#    last put there (manifest). An installed file that differs from BOTH is an
+#    out-of-band edit: abort before any write and say so — that is exactly how
+#    the stack drifted five rewrites ahead of its source in 2026.
+#  * Actions follow persistent state: destinations are appended to a pending
+#    file BEFORE each install and the file is cleared only after every follow-up
+#    action succeeded, so a half-failed run is retried next time instead of being
+#    hidden behind "nothing to do".
+#  * Restarts only what changed, via the fleet's bounded, retrying unit:
+#    legion-fan-curve.sh changed  -> systemctl start legion-fancurve-ac.service
+#                                    (3 tries, TimeoutStartSec=300, OnFailure alert),
+#                                    then poll powermode for 255 (up to 15 s)
+#    profile-watch (bin/unit)     -> restart legion-profile-watch.service
+#    check.timer                  -> restart legion-fan-curve-check.timer
+#    any unit / drop-in           -> daemon-reload
+#    udev rule                    -> udevadm control --reload-rules
+#    everything else              -> nothing live: patches.sh (next pacman txn),
+#                                    sleep hook (next resume), alert/check scripts
+#                                    (next invocation / timer tick), legion-laptop.conf
+#                                    (next module load; module is not in the initramfs)
+#  * Enable state is REPORT-ONLY except for a unit file this run created
+#    (fresh host). A deliberate disable/mask is never overridden.
+#  * LEGION_DRY_RUN=1 prints the classification and exits before any write.
+#  * Installs are atomic (temp file in the same dir, then mv).
 #
-# Source file checksums:
-# legion-flattop-patches.sh: {{ include "dot_local/share/legion-flattop/executable_legion-flattop-patches.sh" | sha256sum }}
-# legion-fan-curve.sh: {{ include "dot_local/share/legion-flattop/executable_legion-fan-curve.sh" | sha256sum }}
-# legion-fan-curve-alert.sh: {{ include "dot_local/share/legion-flattop/executable_legion-fan-curve-alert.sh" | sha256sum }}
-# zz-legion-flattop-patches.hook: {{ include "dot_local/share/legion-flattop/zz-legion-flattop-patches.hook" | sha256sum }}
-# legion-laptop.conf: {{ include "dot_local/share/legion-flattop/legion-laptop.conf" | sha256sum }}
-# legion-fan-curve.service: {{ include "dot_local/share/legion-flattop/legion-fan-curve.service" | sha256sum }}
-# legion-fan-curve-alert.service: {{ include "dot_local/share/legion-flattop/legion-fan-curve-alert.service" | sha256sum }}
-# legion-flattop-resume: {{ include "dot_local/share/legion-flattop/executable_legion-flattop-resume" | sha256sum }}
+# Source file checksums — every regular, non-dot file in the source dir, sorted
+# (the run_onchange trigger). Listed with find so swap files, subdirs and
+# symlinks are skipped here (and rejected by the pre-flight below). A DANGLING
+# symlink anywhere in the chezmoi source tree makes chezmoi itself fail before
+# any template runs (measured 2026-11-02) — loud, and not this script's to fix.
+{{ range (splitList "\n" (trim (output "find" (joinPath .chezmoi.sourceDir "dot_local/share/legion-flattop") "-maxdepth" "1" "-type" "f" "!" "-name" ".*" "-printf" "%p\n")) | sortAlpha) -}}
+{{-   if . }}
+# {{ base . }}: {{ include . | sha256sum }}
+{{-   end -}}
+{{ end }}
 
-set -euo pipefail
-SRC="$HOME/.local/share/legion-flattop"
+set -uo pipefail      # deliberately NOT -e: the ACT phase records failures and continues
 
-# Migration: clean up earlier layouts.
-sudo systemctl disable --now legion-fancontrol.service 2>/dev/null || true
-sudo rm -f /etc/systemd/system/legion-fancontrol.service \
-           /etc/pacman.d/hooks/zz-legion-vpc2004-patch.hook \
-           /etc/pacman.d/hooks/zz-legion-laptop-patches.hook \
-           /usr/local/sbin/legion-vpc2004-patch.sh \
-           /usr/local/sbin/legion-fancontrol-setup.sh
-sudo rm -rf /opt/services/legion-laptop
+SRC="${LEGION_SRC_OVERRIDE:-{{ joinPath .chezmoi.sourceDir "dot_local/share/legion-flattop" }}}"
+STATE="${LEGION_STATE_OVERRIDE:-/var/lib/legion-flattop}"   # root-owned
+MANIFEST="$STATE/installed.sha256"   # "<sha256>  <dst>" for every file this installer put there
+PENDING="$STATE/pending"             # dsts installed by a run whose actions did not all finish
+DRY="${LEGION_DRY_RUN:-0}"           # (the two *_OVERRIDE knobs exist for shimmed tests only)
+BIN=/opt/services/legion-flattop/bin
+UNITS=/etc/systemd/system
+PPD_DROPIN_DIR=$UNITS/power-profiles-daemon.service.d
 
-# Install to /opt/services/legion-flattop/ per fleet convention.
-sudo install -d -m 0755 /opt/services/legion-flattop/bin
-sudo install -m 0755 "$SRC/legion-flattop-patches.sh"   /opt/services/legion-flattop/bin/legion-flattop-patches.sh
-sudo install -m 0755 "$SRC/legion-fan-curve.sh"         /opt/services/legion-flattop/bin/legion-fan-curve.sh
-sudo install -m 0755 "$SRC/legion-fan-curve-alert.sh"   /opt/services/legion-flattop/bin/legion-fan-curve-alert.sh
-sudo install -m 0644 "$SRC/zz-legion-flattop-patches.hook"  /etc/pacman.d/hooks/zz-legion-flattop-patches.hook
-sudo install -m 0644 "$SRC/legion-laptop.conf"          /etc/modprobe.d/legion-laptop.conf
-sudo install -m 0644 "$SRC/legion-fan-curve.service"        /etc/systemd/system/legion-fan-curve.service
-sudo install -m 0644 "$SRC/legion-fan-curve-alert.service"  /etc/systemd/system/legion-fan-curve-alert.service
-sudo install -m 0755 "$SRC/legion-flattop-resume"       /usr/lib/systemd/system-sleep/legion-flattop
+# The ONE table: mode | source name (chezmoi source spelling) | destination.
+TABLE=(
+  "0755 executable_legion-fan-curve.sh        $BIN/legion-fan-curve.sh"
+  "0755 executable_legion-fan-curve-alert.sh  $BIN/legion-fan-curve-alert.sh"
+  "0755 executable_legion-fan-curve-check.sh  $BIN/legion-fan-curve-check.sh"
+  "0755 executable_legion-profile-watch       $BIN/legion-profile-watch"
+  "0755 executable_legion-flattop-patches.sh  $BIN/legion-flattop-patches.sh"
+  "0755 executable_legion-flattop-resume      /usr/lib/systemd/system-sleep/legion-flattop"
+  "0644 legion-fan-curve.service              $UNITS/legion-fan-curve.service"
+  "0644 legion-fan-curve-alert.service        $UNITS/legion-fan-curve-alert.service"
+  "0644 legion-fan-curve-check.service        $UNITS/legion-fan-curve-check.service"
+  "0644 legion-fan-curve-check.timer          $UNITS/legion-fan-curve-check.timer"
+  "0644 legion-fancurve-ac.service            $UNITS/legion-fancurve-ac.service"
+  "0644 legion-profile-watch.service          $UNITS/legion-profile-watch.service"
+  "0644 10-legion-fancurve-reassert.conf      $PPD_DROPIN_DIR/10-legion-fancurve-reassert.conf"
+  "0644 99-legion-fancurve-ac.rules           /etc/udev/rules.d/99-legion-fancurve-ac.rules"
+  "0644 legion-laptop.conf                    /etc/modprobe.d/legion-laptop.conf"
+  "0644 zz-legion-flattop-patches.hook        /etc/pacman.d/hooks/zz-legion-flattop-patches.hook"
+)
+ENABLEABLE=(legion-fan-curve.service legion-fan-curve-check.timer legion-profile-watch.service)
+OUR_UNITS=(legion-fan-curve.service legion-fan-curve-alert.service legion-fan-curve-check.service
+           legion-fan-curve-check.timer legion-fancurve-ac.service legion-profile-watch.service)
 
-sudo systemctl daemon-reload
-sudo systemctl enable legion-fan-curve.service
-sudo systemctl restart legion-fan-curve.service
+log()  { printf 'legion-flattop: %s\n' "$*"; }
+warn() { printf 'legion-flattop: WARN %s\n' "$*" >&2; }
+fail() { printf 'legion-flattop: FAIL %s\n' "$*" >&2; failures+=("$*"); }
+sha()  { sha256sum -- "$1" | cut -d' ' -f1; }
+in_list() { local x="$1"; shift; local e; for e in "$@"; do [[ "$e" == "$x" ]] && return 0; done; return 1; }
 
-echo "legion-flattop: installed to /opt/services/legion-flattop/, fan-curve service enabled"
+# ------------------------------------------------------------------ PRE-FLIGHT
+# The table must cover exactly the files in the source dir (a file chezmoi-readd
+# auto-added, or one dropped, must not go silently unmanaged).
+mapfile -t on_disk < <(find "$SRC" -maxdepth 1 -type f ! -name '.*' -printf '%f\n' | sort)
+if find "$SRC" -mindepth 1 -maxdepth 1 \( -type d -o -type l -o -name '.*' \) | grep -q .; then
+    warn "unexpected entries in $SRC (a subdir, symlink or dot-file) — remove them; nothing installed"; exit 1
+fi
+mapfile -t in_table < <(for row in "${TABLE[@]}"; do set -- $row; echo "$2"; done | sort)
+if [[ "${on_disk[*]}" != "${in_table[*]}" ]]; then
+    warn "source dir and installer table disagree — nothing installed."
+    warn "on disk : ${on_disk[*]}"
+    warn "in table: ${in_table[*]}"
+    exit 1
+fi
+for row in "${TABLE[@]}"; do set -- $row; [[ -r "$SRC/$2" ]] || { warn "unreadable source $SRC/$2 — nothing installed"; exit 1; }; done
+
+# -------------------------------------------------------------------- CLASSIFY
+manifest_hash() { [[ -r "$MANIFEST" ]] && awk -v d="$1" '$2 == d {print $1; exit}' "$MANIFEST"; return 0; }
+declare -a plan=() new=() oob=() uptodate=() failures=()
+for row in "${TABLE[@]}"; do
+    set -- $row; mode="$1" src="$SRC/$2" dst="$3"
+    if [[ ! -e "$dst" ]]; then
+        plan+=("$row"); new+=("$dst")
+    elif cmp -s -- "$src" "$dst"; then
+        uptodate+=("$dst")
+    else
+        want="$(manifest_hash "$dst")"
+        if [[ -n "$want" && "$want" == "$(sha "$dst")" ]]; then
+            plan+=("$row")                        # installed == what we last put there: source is newer
+        else
+            oob+=("$dst")                         # installed matches neither source nor manifest
+        fi
+    fi
+done
+if [[ -e "$PENDING" && ! -r "$PENDING" ]]; then
+    warn "$PENDING exists but is unreadable — refusing to guess; fix its mode and re-run"; exit 1
+fi
+mapfile -t pending_prev < <([[ -r "$PENDING" ]] && grep -v '^$' "$PENDING" | sort -u || true)
+
+if (( ${#oob[@]} )); then
+    if [[ ! -e "$MANIFEST" ]]; then
+        warn "MANIFEST MISSING ($MANIFEST) while the source differs from the installed files — state lost, cannot tell"
+        warn "  which side is newer; nothing installed. Recovery: stash the source edit, run this once to rebuild the"
+        warn "  manifest from the installed files (`chezmoi apply --include=scripts`), unstash, re-apply."
+        exit 1
+    fi
+    warn "OUT-OF-BAND EDIT: these installed files match neither the source nor the manifest; nothing installed."
+    printf '  %s\n' "${oob[@]}" >&2
+    warn "If the installed copy is the one you want: copy it into $SRC (chezmoi source spelling), commit,"
+    warn "  re-run (that no-op run refreshes the manifest and daemon-reloads if a unit needs it), then edit as usual."
+    warn "If the source is right: re-key the manifest to the installed file and re-run, e.g."
+    warn "  sudo sed -i '\\|  <dst>\$|d' $MANIFEST; sha256sum <dst> | sudo tee -a $MANIFEST && chezmoi apply --include=scripts"
+    warn "Note: an in-place edit is only noticed at the next SOURCE change (this is a run_onchange script)."
+    exit 1
+fi
+if (( ${#plan[@]} == 0 )) && (( ${#pending_prev[@]} == 0 )); then
+    # Everything matches. Make the manifest agree with reality (first run: create it;
+    # after an out-of-band recovery: refresh the stale line) so the NEXT source edit
+    # is classified as "source newer", not as a false out-of-band edit. A unit that
+    # was recovered by copy-into-source may still need a daemon-reload: do it here.
+    if [[ "$DRY" != 1 ]]; then
+        for u in "${OUR_UNITS[@]}"; do
+            if [[ "$(systemctl show -p NeedDaemonReload --value "$u" 2>/dev/null)" == yes ]]; then
+                sudo systemctl daemon-reload || warn "daemon-reload failed"; break
+            fi
+        done
+    fi
+    tmp="$(mktemp)"; for row in "${TABLE[@]}"; do set -- $row; sha256sum -- "$3"; done > "$tmp"
+    if [[ -r "$MANIFEST" ]] && cmp -s -- "$tmp" "$MANIFEST"; then
+        rm -f "$tmp"
+        log "all ${#TABLE[@]} installed files already match the source; nothing to do"
+        exit 0
+    fi
+    what="$([[ -e "$MANIFEST" ]] && echo refreshed || echo created)"
+    if [[ "$DRY" == 1 ]]; then rm -f "$tmp"; log "DRY RUN: all ${#TABLE[@]} files match; manifest $MANIFEST would be $what"; exit 0; fi
+    if { [[ -d "$STATE" ]] || sudo install -d -m 0755 -- "$STATE"; } && sudo install -m 0644 -- "$tmp" "$MANIFEST"; then
+        rm -f "$tmp"
+        log "all ${#TABLE[@]} installed files already match the source; manifest $what, nothing else to do"
+        exit 0
+    fi
+    rm -f "$tmp"; warn "could not write $MANIFEST — fix that and re-run (no stack file was changed)"; exit 1
+fi
+
+log "plan: install ${#plan[@]} file(s)$( (( ${#pending_prev[@]} )) && printf '; retry actions for %d pending from a previous run' "${#pending_prev[@]}")"
+for row in "${plan[@]}"; do set -- $row; printf '  install %s -> %s\n' "$2" "$3"; done
+(( ${#pending_prev[@]} )) && printf '  pending: %s\n' "${pending_prev[@]}"
+if [[ "$DRY" == 1 ]]; then log "DRY RUN: stopping before any write"; exit 0; fi
+
+# ------------------------------------------------------------------------- ACT
+for d in "$STATE" "$BIN" "$PPD_DROPIN_DIR" /etc/udev/rules.d /etc/modprobe.d /etc/pacman.d/hooks /usr/lib/systemd/system-sleep; do
+    [[ -d "$d" ]] || sudo install -d -m 0755 -- "$d"
+done
+changed=("${pending_prev[@]}")
+[[ -e "$PENDING" ]] || sudo install -m 0644 -- /dev/null "$PENDING" || { warn "cannot create $PENDING — nothing installed"; exit 1; }
+for row in "${plan[@]}"; do
+    set -- $row; mode="$1" src="$SRC/$2" dst="$3"
+    printf '%s\n' "$dst" | sudo tee -a -- "$PENDING" >/dev/null || { fail "could not record pending $dst"; continue; }
+    tmp="$(dirname "$dst")/.$(basename "$dst").legion-new"
+    if sudo install -m "$mode" -- "$src" "$tmp" && sudo mv -f -- "$tmp" "$dst"; then
+        changed+=("$dst"); log "installed $dst"
+    else
+        sudo rm -f -- "$tmp"; fail "install $dst"
+    fi
+done
+
+# Follow-up actions, each attempted even if an earlier one failed.
+need_reload=0
+for u in "${OUR_UNITS[@]}"; do in_list "$UNITS/$u" "${changed[@]}" && need_reload=1; done
+in_list "$PPD_DROPIN_DIR/10-legion-fancurve-reassert.conf" "${changed[@]}" && need_reload=1
+for u in "${OUR_UNITS[@]}"; do [[ "$(systemctl show -p NeedDaemonReload --value "$u" 2>/dev/null)" == yes ]] && need_reload=1; done
+if (( need_reload )); then sudo systemctl daemon-reload || fail "daemon-reload"; fi
+
+if in_list /etc/udev/rules.d/99-legion-fancurve-ac.rules "${changed[@]}"; then
+    sudo udevadm control --reload-rules || fail "udevadm reload-rules"
+fi
+
+# Fresh-host only: enable units whose files did not exist before this run.
+for u in "${ENABLEABLE[@]}"; do
+    if in_list "$UNITS/$u" "${new[@]}"; then
+        case "$u" in
+            *.timer|legion-profile-watch.service) sudo systemctl enable --now "$u" || fail "enable --now $u" ;;
+            *)                                     sudo systemctl enable "$u"       || fail "enable $u" ;;
+        esac
+    fi
+done
+
+if in_list "$BIN/legion-fan-curve.sh" "${changed[@]}"; then
+    # Re-program the EC with the new script via the bounded, retrying, alert-wired
+    # unit (legion-fan-curve.service verifies once and has no start timeout). The
+    # unit's exit 0 is the curve proof (the script verifies what it wrote); the
+    # powermode poll below proves only the MODE (255 can coexist with the stock
+    # curve after resume); the live proof is the next legion-fan-curve-check tick.
+    if sudo systemctl start legion-fancurve-ac.service; then
+        ok=0
+        for _ in $(seq 1 15); do
+            [[ "$(cat /sys/devices/platform/legion/powermode 2>/dev/null)" == 255 ]] && { ok=1; break; }
+            sleep 1
+        done
+        (( ok )) || fail "powermode not 255 within 15 s after re-applying the curve (journalctl -u legion-fancurve-ac)"
+    else
+        fail "legion-fancurve-ac.service (curve re-apply) did not succeed — its OnFailure alert may have fired; journalctl -u legion-fancurve-ac"
+    fi
+fi
+if in_list "$BIN/legion-profile-watch" "${changed[@]}" || in_list "$UNITS/legion-profile-watch.service" "${changed[@]}"; then
+    # May coincide with a check-timer tick and produce one benign DEGRADED popup.
+    sudo systemctl restart legion-profile-watch.service || fail "restart legion-profile-watch.service"
+fi
+if in_list "$UNITS/legion-fan-curve-check.timer" "${changed[@]}"; then
+    sudo systemctl restart legion-fan-curve-check.timer || fail "restart legion-fan-curve-check.timer"
+fi
+
+# Report-only: the expected steady state. Never override a deliberate disable/mask.
+for u in "${ENABLEABLE[@]}"; do
+    systemctl is-enabled -q "$u" 2>/dev/null || warn "$u is not enabled ($(systemctl is-enabled "$u" 2>&1))"
+done
+for u in legion-fan-curve-check.timer legion-profile-watch.service; do
+    systemctl is-active -q "$u" || warn "$u is not active"
+done
+
+# ------------------------------------------------------------------- FINALIZE
+# Manifest = hash of every installed file that now matches its source; rows that
+# still differ keep their previous manifest line (so a failed install stays retryable).
+tmp="$(mktemp)"
+for row in "${TABLE[@]}"; do
+    set -- $row; src="$SRC/$2" dst="$3"
+    if [[ -e "$dst" ]] && cmp -s -- "$src" "$dst"; then sha256sum -- "$dst"
+    else h="$(manifest_hash "$dst")"; [[ -n "$h" ]] && printf '%s  %s\n' "$h" "$dst"; fi
+done > "$tmp"
+sudo install -m 0644 -- "$tmp" "$MANIFEST" || fail "write manifest"; rm -f "$tmp"
+
+if (( ${#failures[@]} == 0 )); then
+    sudo rm -f -- "$PENDING"
+    log "done: ${#changed[@]} file(s) applied, all actions succeeded (powermode=$(cat /sys/devices/platform/legion/powermode 2>/dev/null || echo '?'))"
+    exit 0
+fi
+warn "${#failures[@]} action(s) FAILED — left pending for the next run:"
+printf '  %s\n' "${failures[@]}" >&2
+exit 1
 {{- end -}}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodically check the Legion custom fan curve is active
+# Backstop for drift that legion-profile-watch did NOT repair, and for that
+# daemon being down. SILENT drift fails no unit and so fires no OnFailure alert.
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=legion-fan-curve-check.service
+
+[Install]
+WantedBy=timers.target

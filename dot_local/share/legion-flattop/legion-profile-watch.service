@@ -1,0 +1,16 @@
+[Unit]
+Description=Re-apply Legion custom fan curve after every power-profile change
+Documentation=file:///opt/services/legion-flattop/bin/legion-profile-watch
+After=dbus.service legion-fan-curve.service
+ConditionVirtualization=!container
+
+[Service]
+Type=simple
+ExecStart=/opt/services/legion-flattop/bin/legion-profile-watch
+Restart=always
+RestartSec=5
+# Same as the other curve units; legion-fan-curve.sh's signal traps assume it.
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

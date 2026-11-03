@@ -1,0 +1,7 @@
+# When the AC adapter (ADP0) is present/online, re-apply the Legion custom fan
+# curve. power-profiles-daemon writes powermode 1/2/3 whenever its profile
+# changes (powerdevil changes it on AC/battery transitions per powerdevilrc),
+# dropping the EC off custom mode 255; this restores it on plug-in. Profile
+# changes at any other time (and drift) are handled by legion-profile-watch.
+# No ACTION clause => matches both "add" (boot) and "change" (plug-in) with online=1.
+SUBSYSTEM=="power_supply", KERNEL=="ADP0", ATTR{online}=="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="legion-fancurve-ac.service"

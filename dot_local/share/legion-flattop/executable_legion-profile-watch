@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""Keep the Legion EC on the custom fan curve across power-profile changes.
+
+Started 2026-10-09; reworked the same day through five review rounds.
+
+WHY: every power-profiles-daemon (PPD) profile change writes platform_profile,
+which drives the EC to powermode 1/2/3 and drops custom mode 255 + our fan
+curve. Lenovo's own tables are not safe to leave in place: stock performance
+(3) caps the fans at PWM 114 (~45%), and quiet (1, what power-saver selects)
+holds PWM 89 from 78 C all the way to 127 C (captured 2026-10-09). The other
+re-assert triggers (boot unit, AC udev unit, PPD ExecStartPost, resume hook)
+never covered a profile change made while plugged in.
+
+KNOWN SIDE EFFECT (power-saver, inferred from PPD source, not yet observed):
+quiet mode leaves a size-8 EC table, which legion-fan-curve.sh can only grow
+back through a powermode 3->255 cycle. PPD re-reads platform_profile ~2 s
+after the 3 is written and, if it reads "performance" before the 255 lands,
+ADOPTS performance as its own profile (and persists it). So choosing
+power-saver may flip back to performance. Thermally safe; it costs the
+CPU-side power saving. Do NOT "fix" that by restoring power-saver from here:
+that writes quiet mode again -> size 8 -> another cycle -> a loop.
+
+HOW:
+  * Subscribes to PPD's PropertiesChanged signal. A plain signal subscription
+    only adds a match rule, so -- unlike `gdbus monitor --dest` -- it never
+    D-Bus-activates PPD (whose startup writes a profile).
+  * Debounce: a write happens only after QUIET_S seconds with no further
+    profile change. The EC applies PPD's change asynchronously (it loads
+    Lenovo's table ~0.6 s after the mode flips, measured 2026-10-09), and an
+    immediate write lost that race 4 times out of 4.
+  * A profile change resets the failure count, and a run that a change
+    overlapped is not a failure: the curve is simply written again once
+    things settle.
+  * Polls powermode AND the curve shape (size 9/10; both fans' top point
+    ~255 PWM, both channels' top temperature ~100 C, from hwmon -- no
+    debugfs, no kernel-log spam) every POLL_S s, because some drift emits
+    no signal: PPD ignores the "custom" value it reads back, so an outside
+    write back to its remembered profile (Fn+Q, the EC) is silent, and the EC
+    can lose the curve on resume while still reporting 255.
+  * CHURN: a curve that keeps getting undone WITHOUT a profile change (poll-
+    or re-check-triggered repairs) never accumulates failures -- every run
+    verifies -- so it is counted separately: CHURN_MAX such repairs within
+    CHURN_WINDOW_S raise a critical alert ("something else is writing the
+    EC"). That is the "every unit green, EC on the stock curve" class. Only
+    repairs where the curve is still off when the run starts count (another
+    unit may have fixed it meanwhile), timed on CLOCK_BOOTTIME so suspended
+    hours still age the window.
+  * Startup reconciles unconditionally, after subscribing.
+  * Each run is `timeout -k 10 RUN_TIMEOUT_S legion-fan-curve.sh` (the script
+    takes its own flock).
+  * Touches HEARTBEAT every poll -- unless a run has been stuck for longer
+    than its own timeout allows, so legion-fan-curve-check sees a wedged
+    repair path as "auto-repair not running" rather than a live loop.
+  * Failed attempts back off RETRY_S; after MAX_FAILS consecutive failures
+    (no profile change in between) it alerts -- critical only if the curve is
+    actually off at that moment, and upgraded to critical later if it goes
+    off -- then keeps retrying every SLOW_RETRY_S and sends a normal-urgency
+    popup when an attempt verifies again.
+  * Alert channels (popup first, then journal) are attempted independently.
+  * Callback errors are caught; if even the handler fails, the process exits
+    so systemd restarts it (Restart=always) and the startup reconcile runs.
+
+No feedback loop: the curve script writes 255, which PPD reads back as
+platform_profile "custom" and ignores (ppd-driver-platform-profile.c maps
+"custom" to PPD_PROFILE_UNSET). Only the script's size-recovery 3->255 cycle
+can make PPD emit a change; after it PPD holds "performance", so the next
+cycle is silent: at most one extra run.
+"""
+
+import os
+import pwd
+import time
+import traceback
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+CURVE = "/opt/services/legion-flattop/bin/legion-fan-curve.sh"
+HEARTBEAT = "/run/legion-profile-watch.heartbeat"
+BINDS = ("/sys/devices/platform/legion", "/sys/bus/platform/devices/VPC2004:00")
+PPD_NAME = "org.freedesktop.UPower.PowerProfiles"
+PPD_PATH = "/org/freedesktop/UPower/PowerProfiles"
+
+QUIET_S = 4
+POLL_S = 5
+RETRY_S = (5, 15)          # back-off after failure 1 and 2; failure 3 alerts
+SLOW_RETRY_S = 120         # after the alert
+RUN_TIMEOUT_S = 120
+MAX_FAILS = 3
+CHURN_WINDOW_S = 600
+CHURN_MAX = 6              # unexplained repairs per window before alerting
+UNEXPLAINED = ("poll", "recheck")   # arm reasons not caused by a profile change
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def powermode():
+    for bind in BINDS:
+        value = read(os.path.join(bind, "powermode"))
+        if value:
+            return value
+    return ""
+
+
+_hwmon = ""
+
+
+def legion_hwmon():
+    """Cached; re-resolved only when the cached node stops being ours."""
+    global _hwmon
+    if _hwmon and read(os.path.join(_hwmon, "name")) == "legion_hwmon":
+        return _hwmon
+    _hwmon = ""
+    try:
+        for name in os.listdir("/sys/class/hwmon"):
+            path = os.path.join("/sys/class/hwmon", name)
+            if read(os.path.join(path, "name")) == "legion_hwmon":
+                _hwmon = path
+                break
+    except OSError:
+        pass
+    return _hwmon
+
+
+def shape_state():
+    """('ok'|'off'|'unknown', description) for the custom curve's shape."""
+    hw = legion_hwmon()
+    if not hw:
+        return "unknown", "legion_hwmon not found"
+    size = read(os.path.join(hw, "auto_points_size"))
+    if not size.isdigit():
+        return "unknown", "curve size unreadable"
+    if size not in ("9", "10"):
+        return "off", f"curve size {size}"
+    vals = [read(os.path.join(hw, f"pwm{ch}_auto_point{size}_{kind}"))
+            for ch in (1, 2) for kind in ("pwm", "temp")]
+    if not all(v.isdigit() for v in vals):
+        return "unknown", "top point unreadable"
+    pwm1, temp1, pwm2, temp2 = (int(v) for v in vals)
+    if any(abs(p - 255) > 3 for p in (pwm1, pwm2)) or any(abs(t - 100) > 3 for t in (temp1, temp2)):
+        return "off", f"top point {pwm1}/{pwm2} PWM @ {temp1}/{temp2} C"
+    return "ok", ""
+
+
+def curve_state():
+    """'off' if the EC is provably off our curve, 'unknown' if that cannot
+    be read, else 'ok'."""
+    pm = powermode()
+    if not pm:
+        return "unknown"
+    if pm != "255":
+        return "off"
+    return shape_state()[0]
+
+
+def boottime():
+    """Keeps counting through suspend, unlike time.monotonic()."""
+    return time.clock_gettime(time.CLOCK_BOOTTIME)
+
+
+def notify_all(title, body, urgency):
+    """notify-send once per user that has a session bus, without waiting.
+
+    One popup per uid (loginctl lists several sessions for the same user, and
+    KDE critical popups do not expire), and fire-and-forget (bounded by
+    `timeout`) so the main loop never blocks on a slow desktop."""
+    try:
+        uids = os.listdir("/run/user")
+    except OSError:
+        return
+    for uid in uids:
+        rdir = f"/run/user/{uid}"
+        if not uid.isdigit() or not os.path.exists(f"{rdir}/bus"):
+            continue
+        try:
+            user = pwd.getpwuid(int(uid)).pw_name
+            Gio.Subprocess.new(["timeout", "10", "runuser", "-u", user, "--", "env",
+                                f"XDG_RUNTIME_DIR={rdir}",
+                                f"DBUS_SESSION_BUS_ADDRESS=unix:path={rdir}/bus",
+                                "notify-send", f"--urgency={urgency}",
+                                "--app-name=legion-fan-curve", title, body],
+                               Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except (KeyError, GLib.Error) as e:
+            log(f"notify for uid {uid} failed: {e}")
+
+
+def raise_alert(title, body, urgency, journal_msg):
+    """Popup first, then journal, each attempted independently."""
+    log(journal_msg)
+    try:
+        notify_all(title, body, urgency)
+    except Exception:
+        log("popup failed:\n" + traceback.format_exc())
+    try:
+        Gio.Subprocess.new(["logger", "-t", "legion-fan-curve-alert",
+                            "-p", "user.err" if urgency == "critical" else "user.warning",
+                            "--", journal_msg], Gio.SubprocessFlags.NONE)
+    except Exception:
+        log("logger failed:\n" + traceback.format_exc())
+
+
+def guarded(fn):
+    """Keep exceptions out of GLib (which would silently drop the callback's
+    source). If even the handler fails, exit: systemd restarts the daemon and
+    its startup reconcile runs -- better than a live process doing nothing."""
+    def wrapper(self, *args):
+        try:
+            return fn(self, *args)
+        except Exception:
+            try:
+                log("internal error in " + fn.__name__ + ":\n" + traceback.format_exc())
+                self.recover()
+            except Exception:
+                os._exit(70)
+            return GLib.SOURCE_CONTINUE if fn.__name__ == "poll" else GLib.SOURCE_REMOVE
+    return wrapper
+
+
+class Watcher:
+    def __init__(self):
+        self.changes = 0       # bumped on every ActiveProfile signal
+        self.timer = 0         # GLib source id of the armed re-apply; 0 = none
+        self.reason = ""       # why the armed re-apply was scheduled
+        self.proc = None       # the in-flight run, if any
+        self.run_started = 0.0
+        self.stuck_logged = False
+        self.fails = 0
+        self.alert_level = ""  # "" | "normal" | "critical": the failure alert sent so far
+        self.unexplained = []  # boottime stamps of repairs no profile change explains
+        self.churn_alerted = False
+
+    @property
+    def running(self):
+        return self.proc is not None
+
+    def recover(self):
+        """After an internal error. A run still in flight will report through
+        done(); otherwise count a failed attempt, so a persistent error backs
+        off and alerts instead of spinning."""
+        if self.running:
+            log("internal error while a run is in flight; leaving it to finish")
+            return
+        self.fail(-1, powermode())
+
+    def arm(self, delay, reason):
+        if self.timer:
+            GLib.source_remove(self.timer)
+        self.reason = reason
+        self.timer = GLib.timeout_add_seconds(delay, self.fire)
+
+    @guarded
+    def on_signal(self, _conn, _sender, _path, _iface, _signal, params, _data):
+        iface_name, changed, _invalidated = params.unpack()
+        if iface_name != PPD_NAME or "ActiveProfile" not in changed:
+            return
+        self.changes += 1
+        self.fails = 0          # a new change starts a new attempt series
+        log(f"PPD switched to {changed['ActiveProfile']}")
+        if not self.running:
+            self.arm(QUIET_S, "signal")   # restart the quiet window
+        # While a run is in flight, finish() sees `changes` moved and re-arms.
+
+    @guarded
+    def poll(self):
+        if self.running and time.monotonic() - self.run_started > RUN_TIMEOUT_S + 30:
+            if not self.stuck_logged:
+                log(f"a re-apply run has been stuck for over {RUN_TIMEOUT_S + 30} s; "
+                    "withholding the heartbeat")
+                self.stuck_logged = True
+            return GLib.SOURCE_CONTINUE
+        try:
+            with open(HEARTBEAT, "w"):
+                pass
+        except OSError:
+            pass
+        if self.running or self.timer:
+            return GLib.SOURCE_CONTINUE
+        pm = powermode()
+        if pm != "255":
+            log(f"poll: powermode={pm or '?'}; scheduling a re-apply")
+            self.arm(QUIET_S, "poll")
+        else:
+            state, desc = shape_state()
+            if state == "off":
+                log(f"poll: custom mode but wrong shape ({desc}); scheduling a re-apply")
+                self.arm(QUIET_S, "poll")
+        return GLib.SOURCE_CONTINUE
+
+    def note_unexplained(self):
+        now = boottime()
+        self.unexplained = [t for t in self.unexplained if now - t < CHURN_WINDOW_S] + [now]
+        n = len(self.unexplained)
+        if n >= CHURN_MAX and not self.churn_alerted:
+            raise_alert(
+                "Legion fan curve keeps getting undone",
+                f"Re-applied {n} times in {CHURN_WINDOW_S // 60} min without a power-profile change: "
+                "something else is writing the EC (CoolerControl? Fn+Q?). "
+                "Details: journalctl -u legion-profile-watch",
+                "critical",
+                f"fan curve keeps getting undone: {n} re-applies in {CHURN_WINDOW_S} s "
+                "with no profile change")
+            self.churn_alerted = True
+        elif n <= 1:
+            self.churn_alerted = False     # the window drained: re-arm the alert
+
+    @guarded
+    def fire(self):
+        reason = self.reason
+        self.timer = 0
+        if reason in UNEXPLAINED and curve_state() == "off":
+            self.note_unexplained()
+        gen = self.changes
+        self.run_started = time.monotonic()
+        self.stuck_logged = False
+        proc = Gio.Subprocess.new(
+            ["timeout", "-k", "10", str(RUN_TIMEOUT_S), CURVE],
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+        proc.communicate_utf8_async(None, None, self.done, gen)
+        self.proc = proc     # only once the run is really in flight
+        return GLib.SOURCE_REMOVE
+
+    @guarded
+    def done(self, proc, result, gen):
+        self.proc = None
+        try:
+            _ok, out, _err = proc.communicate_utf8_finish(result)
+        except GLib.Error as e:
+            out = f"could not read {CURVE} output: {e.message}"
+        rc = proc.get_exit_status() if proc.get_if_exited() else -1
+        self.finish(gen, rc, out or "")
+
+    def finish(self, gen, rc, out):
+        for line in out.splitlines():
+            log(line)
+        if self.changes != gen:
+            log("profile changed during the run; re-applying once it settles")
+            self.arm(QUIET_S, "signal")
+            return
+        pm = powermode()
+        if rc == 0:
+            if pm != "255":
+                # The run verified; something moved powermode afterwards (a PPD
+                # write whose signal is still queued, Fn+Q). Not a failure --
+                # but unexplained if no signal follows, which CHURN counts.
+                log(f"run verified but powermode is now {pm or '?'}; re-applying once it settles")
+                self.arm(QUIET_S, "recheck")
+                return
+            if self.alert_level:
+                log("re-apply verified; earlier alert resolved")
+                try:
+                    notify_all("Legion fan curve re-applied",
+                               "The earlier fan-curve alert is resolved (powermode=255).",
+                               "normal")
+                except Exception:
+                    log("popup failed:\n" + traceback.format_exc())
+            self.fails = 0
+            self.alert_level = ""
+            return
+        self.fail(rc, pm)
+
+    def fail(self, rc, pm):
+        self.fails += 1
+        log(f"attempt {self.fails} did not verify (exit {rc}, powermode={pm or '?'})")
+        if self.fails >= MAX_FAILS:
+            state = curve_state()
+            want = "critical" if state == "off" else "normal"
+            # Send once; upgrade a normal alert if the curve later goes off.
+            if not self.alert_level or (self.alert_level == "normal" and want == "critical"):
+                if want == "critical":
+                    raise_alert("Legion fan curve could not be re-applied",
+                                f"{self.fails} attempts failed, powermode={powermode() or '?'} "
+                                "(255 = our curve). Details: journalctl -u legion-profile-watch",
+                                "critical",
+                                f"fan curve could not be re-applied: {self.fails} attempts failed "
+                                f"(last exit {rc}, powermode={pm or '?'})")
+                else:
+                    now = "is currently fine" if state == "ok" else "could not be read"
+                    raise_alert("Fan-curve re-apply keeps failing",
+                                f"Re-applying the fan curve failed {self.fails} times; the curve "
+                                f"{now}. Details: journalctl -u legion-profile-watch",
+                                "normal",
+                                f"fan-curve re-apply failed {self.fails} times (last exit {rc}); "
+                                f"curve {now}")
+                self.alert_level = want
+            self.arm(SLOW_RETRY_S, "retry")
+        else:
+            self.arm(RETRY_S[self.fails - 1], "retry")
+
+
+def main():
+    w = Watcher()
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    bus.signal_subscribe(PPD_NAME, "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                         PPD_PATH, None, Gio.DBusSignalFlags.NONE, w.on_signal, None)
+    w.poll()
+    GLib.timeout_add_seconds(POLL_S, w.poll)
+    w.arm(1, "startup")   # startup reconcile: unconditional, and only after subscribing
+    log("watching power-profiles-daemon; startup re-apply scheduled")
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()

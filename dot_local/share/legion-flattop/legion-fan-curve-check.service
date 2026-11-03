@@ -1,0 +1,7 @@
+[Unit]
+Description=Check the Legion custom fan curve is actually active
+Documentation=https://github.com/johnfanv2/LenovoLegionLinux
+
+[Service]
+Type=oneshot
+ExecStart=/opt/services/legion-flattop/bin/legion-fan-curve-check.sh
