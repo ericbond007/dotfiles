@@ -1,4 +1,10 @@
-{{- if eq .chezmoi.hostname "flattop" -}}
+{{- /* NEUTRALISED 2026-11-02 (aiImprove audit §3.1): this script had been pending
+     since 2026-05-14 while the installed fan stack moved five rewrites ahead of
+     these May source copies; running it would downgrade legion-fan-curve.sh
+     (27 KB -> 6.5 KB) and restart the fan service. It now renders EMPTY on every
+     host (chezmoi skips empty scripts) until the back-port lands and this guard
+     is replaced by an idempotent installer. Reverting this commit re-arms the hazard. */ -}}
+{{- if false -}}
 #!/usr/bin/env bash
 # Installs the legion-flattop system files (kernel-module patcher, fan-curve
 # systemd unit, modprobe options, pacman hook) from the chezmoi-managed source
@@ -53,8 +59,4 @@ sudo systemctl enable legion-fan-curve.service
 sudo systemctl restart legion-fan-curve.service
 
 echo "legion-flattop: installed to /opt/services/legion-flattop/, fan-curve service enabled"
-{{- else -}}
-#!/usr/bin/env bash
-# legion-flattop fixes only apply on flattop (Lenovo Legion 7 16ACHg6); skipping.
-true
 {{- end -}}
