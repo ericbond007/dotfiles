@@ -37,7 +37,7 @@ GIT=(git -c core.fsmonitor= -c diff.external= -c core.hooksPath=/dev/null --no-p
 # placeholders/op:// refs; rendered secret files are gitignored). Mirrors the real
 # git hook /opt/services/.githooks/pre-commit — keep the two in sync.
 # Pathspec excludes replace the old file list (no word-splitting of file names, templates skipped in git).
-DIFF=$(cd "$CWD" 2>/dev/null && "${GIT[@]}" diff --cached --no-ext-diff --no-textconv --diff-filter=d -- . ':(exclude,glob)**/*.tpl' ':(exclude,glob)**/*.sample' ':(exclude,glob)**/*.example' ':(exclude,glob)**/*.template' 2>/dev/null || true)
+DIFF=$(cd "$CWD" 2>/dev/null && "${GIT[@]}" diff --cached --no-ext-diff --no-textconv --diff-filter=d -- ':/' ':(top,exclude,glob)**/*.tpl' ':(top,exclude,glob)**/*.sample' ':(top,exclude,glob)**/*.example' ':(top,exclude,glob)**/*.template' 2>/dev/null || true)   # ':/' = whole repo even from a subdir
 
 if [[ -z "$DIFF" ]]; then
   exit 0
