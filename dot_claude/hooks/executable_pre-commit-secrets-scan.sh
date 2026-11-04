@@ -20,7 +20,13 @@ GIT_COMMIT_RE='git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space
 if ! printf '%s' "$COMMAND" | grep -qE "$GIT_COMMIT_RE"; then
   exit 0
 fi
-# Scan the repo the command targets: `-C <dir>` wins over the session cwd.
+# An ssh-wrapped commit (`ssh host '… git -C /remote/path commit …'`) targets a repo on ANOTHER host:
+# nothing here can scan it, and its -C path usually does not exist locally. Leave it to that host's own
+# controls (wanda's /opt/services and wiki repos carry their own .githooks) and never block on it.
+if printf '%s' "$COMMAND" | grep -qE '(^|[[:space:];&|(])ssh[[:space:]]'; then
+  exit 0
+fi
+# Scan the repo the command targets: `-C <dir>` wins over the session cwd (a leading ~ is expanded).
 REPO=$(printf '%s' "$COMMAND" | grep -oE "$GIT_COMMIT_RE" | head -1 | grep -oE -- '-C[[:space:]]+[^[:space:]]+' | head -1 | awk '{print $2}' | tr -d "\"'" || true)   # no -C → empty, never a failure under set -e/pipefail
 # Hardening (2026-11-04, security review): the -C path comes from the command text and this scan runs
 # BEFORE approval, so git is run with every repo-local code path disabled — external diff, textconv,
@@ -30,6 +36,7 @@ REPO=$(printf '%s' "$COMMAND" | grep -oE "$GIT_COMMIT_RE" | head -1 | grep -oE -
 export GIT_NO_LAZY_FETCH=1
 GIT=(git -c core.fsmonitor= -c diff.external= -c core.hooksPath=/dev/null -c protocol.allow=never -c core.sshCommand=false -c fetch.negotiationAlgorithm=noop --no-pager)
 if [[ -n "$REPO" ]]; then
+  case "$REPO" in "~") REPO="$HOME";; "~/"*) REPO="$HOME/${REPO#\~/}";; esac
   case "$REPO" in /*) ;; *) REPO="$CWD/$REPO";; esac   # relative -C is relative to the session cwd
   CWD=$(realpath -m -- "$REPO" 2>/dev/null || printf '%s' "$REPO")
   if ! (cd "$CWD" 2>/dev/null && "${GIT[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1); then
@@ -38,7 +45,7 @@ if [[ -n "$REPO" ]]; then
   fi
 fi
 # Pathspec excludes replace the old file list (no word-splitting of file names, templates skipped in git).
-DIFF=$(cd "$CWD" 2>/dev/null && "${GIT[@]}" diff --cached --no-ext-diff --no-textconv --diff-filter=d -- ':/' ':(top,exclude,glob)**/*.tpl' ':(top,exclude,glob)**/*.sample' ':(top,exclude,glob)**/*.example' ':(top,exclude,glob)**/*.template' 2>/dev/null || true)   # ':/' = whole repo even from a subdir
+DIFF=$(cd "$CWD" 2>/dev/null && "${GIT[@]}" diff --cached --no-ext-diff --no-textconv --submodule=short --diff-filter=d -- ':/' ':(top,exclude,glob)**/*.tpl' ':(top,exclude,glob)**/*.sample' ':(top,exclude,glob)**/*.example' ':(top,exclude,glob)**/*.template' 2>/dev/null || true)   # ':/' = whole repo even from a subdir
 
 if [[ -z "$DIFF" ]]; then
   exit 0
