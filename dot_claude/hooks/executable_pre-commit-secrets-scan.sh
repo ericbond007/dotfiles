@@ -23,7 +23,11 @@ fi
 # An ssh-wrapped commit (`ssh host '… git -C /remote/path commit …'`) targets a repo on ANOTHER host:
 # nothing here can scan it, and its -C path usually does not exist locally. Leave it to that host's own
 # controls (wanda's /opt/services and wiki repos carry their own .githooks) and never block on it.
-if printf '%s' "$COMMAND" | grep -qE '(^|[[:space:];&|(])ssh[[:space:]]'; then
+# Only an `ssh` token BEFORE the git-commit match counts as a wrapper (a commit message that merely
+# mentions "ssh …" after it is still scanned).
+MATCHED=$(printf '%s' "$COMMAND" | grep -oE "$GIT_COMMIT_RE" | head -1)
+PREFIX=${COMMAND%%"$MATCHED"*}
+if printf '%s' "$PREFIX" | grep -qE '(^|[[:space:];&|(])ssh[[:space:]]'; then
   exit 0
 fi
 # Scan the repo the command targets: `-C <dir>` wins over the session cwd (a leading ~ is expanded).
