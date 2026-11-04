@@ -46,6 +46,7 @@ SERVICE_USERS=(
   "mosquitto"
   "dovecot"
   "postfix"
+  "trunk-recorder"   # serp: scanner-transcriber (added 2026-11-04 when serp got this hook)
 )
 
 for user in "${SERVICE_USERS[@]}"; do

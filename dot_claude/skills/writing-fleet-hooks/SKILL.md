@@ -26,11 +26,11 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
   - `PreToolUse`/`PostToolUse`: `tool_name`, `tool_input.file_path` (Edit/Write; `NotebookEdit` sends `notebook_path` and is NOT covered by the blockers), `tool_input.command` (Bash), `cwd`
   - `Notification`: `message`, `title`, `notification_type`
   - `SessionEnd`: `session_id`, `cwd`, `reason`
-- **Exit codes:**
-  - `0` — silent pass
-  - `2` — blocks the tool (PreToolUse) / aborts (others print stderr but don't block)
-  - other non-zero — stderr shown to Claude as warning
-- **Output:** stderr goes to Claude's context; stdout is mostly ignored except PostToolUse where it's appended
+- **Exit codes and what reaches the MODEL** (hook docs; relearned 2026-11-04 when `firewall-post-edit.sh` turned out to have been printing to nobody):
+  - `0` — pass (not an auto-approve). Plain stdout never reaches Claude: PostToolUse/Notification stdout lands in transcript view only (ctrl+o), PreToolUse/Stop stdout is shown nowhere; the exceptions are `UserPromptSubmit`/`SessionStart`, where stdout becomes context. To reach Claude on exit 0, print JSON on stdout: PreToolUse/PostToolUse `{"hookSpecificOutput":{"hookEventName":"<Event>","additionalContext":"…"}}`; Stop `{"decision":"block","reason":"…"}`.
+  - `2` — stderr is fed to Claude for PreToolUse (blocks the tool), PostToolUse (shown after the fact; the tool already ran) and Stop (blocks the stop). For `UserPromptSubmit` (blocks and erases the prompt) and `SessionStart`, exit-2 stderr goes to the user only.
+  - other non-zero — non-blocking; stderr goes to the user, not to Claude.
+- **Output rule of thumb:** a reminder that must reach the session is either exit 2 + stderr or exit 0 + JSON `additionalContext`. Plain stderr on exit 0 is invisible to the model.
 - **Early exit:** check `tool_name` / `file_path` / `command` up top and exit 0 fast when not applicable
 - **Never `set -e` without `set -u`** and always trap broken deps with `|| true` for side-effect calls that can legitimately fail
 
@@ -127,9 +127,14 @@ A hook entry is a JSON object inside its event's array. For shared entries, just
   }{{ if eq .chezmoi.hostname "wanda" }},
   { "matcher": "Bash",
     "hooks": [{ "type": "command", "command": "~/.claude/hooks/wanda-only.sh" }]
+  }{{ end }}{{ if or (eq .chezmoi.hostname "wanda") (eq .chezmoi.hostname "serpentii") }},
+  { "matcher": "Bash",
+    "hooks": [{ "type": "command", "command": "~/.claude/hooks/service-hosts.sh" }]
   }{{ end }}
 ]
 ```
+
+Several conditionals can follow one another on the same closing line, each carrying its own leading comma; serp's `.chezmoi.hostname` is `serpentii`, not `serp`. A script registered on more than one host must not assume one host's tooling (the firewall reminder checks for wanda's `config-commit` wrapper and falls back to `etckeeper commit`; the service-owned-files blocker keeps one `SERVICE_USERS` list for both hosts). Render-check every branch (step 4) after changing a conditional.
 
 The `{{ if ... }},` pattern puts the comma *inside* the conditional so the shared entry is always valid JSON on its own, and the wanda branch contributes a leading comma + its entries.
 

@@ -34,7 +34,7 @@ The fleet (flattop/wanda/serp, plus living-pi as a Claude-Code-less sync peer; b
 - `chezmoi-sync.sh` — **not registered as a hook**. Manually invoked (typically by Claude driving the workflow, sometimes via `/chezmoi-sync`). Refuses on a dirty tree, pushes `origin/master`, then ssh's each peer (self-excluded via `hostname -s`) to run `chezmoi update`.
 - `notify-tmux.sh` — **Notification**. Only fires inside tmux (guarded by `$TMUX`). Calls `notify-send` with tmux window context so Claude notifications reach KDE even when tmux swallows the OSC 9 sequence.
 
-Wanda additionally registers `block-generated-files`, `block-service-owned-files`, `firewall-validate`, `pre-commit-secrets-scan` (PreToolUse) and `firewall-post-edit`, `wiki-update-reminder` (PostToolUse) via the `{{ if eq .chezmoi.hostname "wanda" }}` block in `dot_claude/modify_private_settings.json.tmpl`. Those scripts ship in the shared source tree but never register elsewhere.
+The service hosts additionally register, via hostname conditionals in `dot_claude/modify_private_settings.json.tmpl`: on **wanda and serp** (`{{ if or (eq .chezmoi.hostname "wanda") (eq .chezmoi.hostname "serpentii") }}`, since 2026-11-04) `block-service-owned-files`, `firewall-validate`, `pre-commit-secrets-scan` (PreToolUse) and `firewall-post-edit` (PostToolUse); on **wanda only** (`{{ if eq .chezmoi.hostname "wanda" }}`) `block-generated-files` (PreToolUse) and `wiki-update-reminder` (PostToolUse), because the rendered-secret `.tpl` pairs and the wiki exist only there. All of those scripts ship in the shared source tree; they never register on flattop.
 
 For the registration/hostname-conditional pattern and the per-host verify command, see the `writing-fleet-hooks` skill — it owns that material.
 

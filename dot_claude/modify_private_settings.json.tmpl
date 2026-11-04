@@ -34,6 +34,17 @@
 # both sides), not a clean status. Reverting this commit + applying puts
 # flattop back in "default" mode — expected, not a new bug; Dave re-picks auto.
 #
+# Host-conditional hook blocks (Dave, 2026-11-04, aiImprove audit §3.7 "serp hooks"):
+#   wanda + serpentii (the service hosts; serp reports hostname "serpentii"): block-service-owned-files,
+#     firewall-validate, pre-commit-secrets-scan, firewall-post-edit — each guards something both hosts
+#     have (nftables; a /opt/services git repo with service-owned files). The Claude-side secrets scan
+#     covers a commit of an already-staged index only; the usual add-and-commit form is covered just by
+#     the repo's own .githooks/pre-commit, which wanda has and serp does not (follow-up for Dave).
+#   wanda only: block-generated-files (rendered-secret .tpl pairs exist only there) and
+#     wiki-update-reminder (the wiki lives there).
+#   The two Bash ones are old wanda registrations extended as-is, not folded into bash-guards.sh:
+#     any byte change there moves the Codex hash pin (see hooks/tests/codex-hash-pin.test.sh).
+#
 # security-guidance plugin seeded FALSE (Dave, 2026-11-03, aiImprove audit §3.6): one useful
 # injection in 1,422 transcripts vs seven Python spawns on most Bash calls; disabled live on
 # flattop/wanda/serp with `claude plugin disable … --scope user` (new sessions only).
@@ -67,14 +78,14 @@ MANAGED='{
     "PreToolUse": [
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/bash-guards.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] }{{ end }}{{ if or (eq .chezmoi.hostname "wanda") (eq .chezmoi.hostname "serpentii") }},
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-validate.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/pre-commit-secrets-scan.sh" } ] }{{ end }}
     ],
     "PostToolUse": [
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-readd.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-readd.sh" } ] }{{ if or (eq .chezmoi.hostname "wanda") (eq .chezmoi.hostname "serpentii") }},
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-post-edit.sh" } ] }{{ end }}{{ if eq .chezmoi.hostname "wanda" }},
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/wiki-update-reminder.sh" } ] }{{ end }}
     ],
     "Stop": [
