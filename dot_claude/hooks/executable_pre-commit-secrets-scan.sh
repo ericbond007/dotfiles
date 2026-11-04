@@ -22,20 +22,21 @@ if ! printf '%s' "$COMMAND" | grep -qE "$GIT_COMMIT_RE"; then
 fi
 # Scan the repo the command targets: `-C <dir>` wins over the session cwd.
 REPO=$(printf '%s' "$COMMAND" | grep -oE "$GIT_COMMIT_RE" | head -1 | grep -oE -- '-C[[:space:]]+[^[:space:]]+' | head -1 | awk '{print $2}' | tr -d "\"'" || true)   # no -C → empty, never a failure under set -e/pipefail
-# Hardening (2026-11-04, security review): the -C path comes from the command text, so only honour it
-# when it resolves under $HOME or /opt/services; anything else falls back to the session cwd. And run
-# git with repo-local code paths disabled (external diff, textconv, fsmonitor, hooks) — a hostile repo
-# config must not get code execution out of a secrets scan that runs before approval.
+# Hardening (2026-11-04, security review): the -C path comes from the command text and this scan runs
+# BEFORE approval, so git is run with every repo-local code path disabled — external diff, textconv,
+# fsmonitor, hooks, pager, lazy fetch and all remote transports — and the named target is always the
+# one scanned (no silent fallback to the session cwd). A -C target that cannot be entered or is not a
+# git work tree fails CLOSED (exit 2): a missing or wrong target is never treated as "no diff".
+export GIT_NO_LAZY_FETCH=1
+GIT=(git -c core.fsmonitor= -c diff.external= -c core.hooksPath=/dev/null -c protocol.allow=never -c core.sshCommand=false -c fetch.negotiationAlgorithm=noop --no-pager)
 if [[ -n "$REPO" ]]; then
   case "$REPO" in /*) ;; *) REPO="$CWD/$REPO";; esac   # relative -C is relative to the session cwd
-  REPO_REAL=$(realpath -m -- "$REPO" 2>/dev/null || true)
-  case "$REPO_REAL" in "$HOME"/*|/opt/services|/opt/services/*) CWD="$REPO_REAL";; esac
+  CWD=$(realpath -m -- "$REPO" 2>/dev/null || printf '%s' "$REPO")
+  if ! (cd "$CWD" 2>/dev/null && "${GIT[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+    echo "BLOCKED: pre-commit secrets scan cannot enter the -C target '$CWD' (missing, unreadable or not a git work tree) — not scanning blind. Fix the path, or run the commit without -C from inside the repo." >&2
+    exit 2
+  fi
 fi
-GIT=(git -c core.fsmonitor= -c diff.external= -c core.hooksPath=/dev/null --no-pager)
-
-# Get the staged diff — only NON-template files (templates legitimately carry
-# placeholders/op:// refs; rendered secret files are gitignored). Mirrors the real
-# git hook /opt/services/.githooks/pre-commit — keep the two in sync.
 # Pathspec excludes replace the old file list (no word-splitting of file names, templates skipped in git).
 DIFF=$(cd "$CWD" 2>/dev/null && "${GIT[@]}" diff --cached --no-ext-diff --no-textconv --diff-filter=d -- ':/' ':(top,exclude,glob)**/*.tpl' ':(top,exclude,glob)**/*.sample' ':(top,exclude,glob)**/*.example' ':(top,exclude,glob)**/*.template' 2>/dev/null || true)   # ':/' = whole repo even from a subdir
 
