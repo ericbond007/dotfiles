@@ -43,6 +43,9 @@ chk "agent definition .md, no review"             "$(edit /h/.local/share/chezmo
 chk "deployed agent .md, no review"               "$(edit /h/.claude/agents/x.md)"                                 BLOCK
 chk "CLAUDE-origins.md, no review"                "$(edit /h/.claude/CLAUDE-origins.md)"                            BLOCK
 chk "unrelated /agents/ notes.md, no review"      "$(edit /h/projects/x/agents/notes.md)"                            allow
+chk "slash command .md (source), no review"       "$(edit /h/.local/share/chezmoi/dot_claude/commands/chezmoi-sync.md)" BLOCK
+chk "slash command .md (deployed), no review"     "$(edit /h/.claude/commands/x.md)"                                 BLOCK
+chk "unrelated /commands/ notes.md, no review"    "$(edit /h/projects/x/commands/notes.md)"                          allow
 chk "README.md, no review"                        "$(edit /x/README.md)"                                            BLOCK
 chk "review BEFORE a tpl edit (stale review)"     "$(agent 'Cold review of spec')
 $(edit /x/deploy/jail.env.tpl)"                                                                                     BLOCK

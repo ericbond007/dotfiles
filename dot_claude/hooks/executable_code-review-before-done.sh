@@ -100,6 +100,7 @@ read -r last_edit last_review last_kind < <(
             or test("(^|/)(CLAUDE|AGENTS|CLAUDE-origins)\\.md$")
             or test("/skills/.*\\.md$")
             or test("/(dot_claude|\\.claude)/agents/.*\\.md$")
+            or test("/(dot_claude|\\.claude)/commands/.*\\.md$")
             or test("/(dot_claude|\\.claude)/.*settings\\.json$")));
     def artifact_edit($c):
       ($c.type? == "tool_use")
