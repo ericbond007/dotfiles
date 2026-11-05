@@ -65,6 +65,20 @@
 
 set -euo pipefail
 
+# Arguments: none, or --refresh-power-table (legion-fancurve-ac.service only;
+# see step 2b). Anything else is a caller bug -- refuse rather than silently
+# run without the flag the caller meant to pass.
+REFRESH_POWER_TABLE=0
+if (( $# > 1 )); then
+    echo "legion-fan-curve: too many arguments ($#); only one optional --refresh-power-table is accepted" >&2
+    exit 2
+fi
+case "${1:-}" in
+    "") ;;
+    --refresh-power-table) REFRESH_POWER_TABLE=1 ;;
+    *) echo "legion-fan-curve: unknown argument '$1' (only --refresh-power-table is accepted)" >&2; exit 2 ;;
+esac
+
 # 2026-08-30: SERIALIZE. Five independent triggers run this same script --
 # legion-fan-curve.service (boot), legion-fancurve-ac.service (udev AC event),
 # power-profiles-daemon's ExecStartPost, the /usr/lib/systemd/system-sleep
@@ -121,6 +135,66 @@ fi
 #    lockfancontroller=1 freezes fans at current PWM (misleadingly named).
 echo 0 > "$VPC/fan_fullspeed"
 echo 0 > "$VPC/lockfancontroller"
+
+# A REAL EC mode transition: performance (3) for ~2 s, then back to custom
+# (255). Used by (a) the size-8 curve recovery below and (b) --refresh-power-
+# table. Ends at powermode=255 with both override flags cleared.
+# ⚠️ Call it as a plain statement, NEVER as an `if`/`||`/`&&` condition: that
+# would suspend `set -e` for its whole body, so a failed 255 write would no
+# longer abort (and fire the EXIT restore) -- it would just carry on.
+powermode_cycle() {
+    # TRAP FIRST, and it is not optional. Between the two writes below the
+    # EC sits in PERFORMANCE mode = the stock curve. `sleep` is an
+    # interruptible foreground child and bash dies on SIGTERM/SIGINT by
+    # default, so without this a Ctrl-C, a `systemctl stop`, a shutdown, or
+    # an earlyoom signal in that ~2 s window would strand the EC on the
+    # stock curve with NOTHING to put it back -- the drift checker is
+    # alert-only by design. That is this script making things WORSE than
+    # not running. Handler is idempotent, so it is harmless on success.
+    #
+    # ⚠️ The handlers EXIT rather than just running a command. A bare
+    # `trap '<cmd>' TERM` runs the command and then RESUMES the script,
+    # swallowing the signal. Both curve units carry TimeoutStopUSec=10s, so
+    # a swallowed TERM does not hang shutdown (an earlier version of this
+    # comment claimed it would -- wrong); the real cost is that systemd
+    # escalates to SIGKILL at 10 s, and SIGKILL runs NO handler, so the EC
+    # would be stranded at powermode 3 after all. Caught by testing the
+    # trap instead of assuming it. Residual uncoverable paths: SIGKILL and
+    # power loss.
+    # EXIT restores only; the signal traps restore and exit with the
+    # conventional 128+signo so systemd still sees a signal death.
+    # Restores BOTH powermode and the override flags: lockfancontroller=1
+    # freezes the fans at their current PWM, and either caller may run at idle
+    # with fans parked low, so leaving it set is worse than doing nothing.
+    _restore_pm() {
+        echo 255 > "$VPC/powermode" 2>/dev/null || true
+        echo 0 > "$VPC/fan_fullspeed" 2>/dev/null || true
+        echo 0 > "$VPC/lockfancontroller" 2>/dev/null || true
+    }
+    trap '_restore_pm' EXIT
+    trap '_restore_pm; exit 130' INT
+    trap '_restore_pm; exit 143' TERM
+    trap '_restore_pm; exit 129' HUP
+    trap '_restore_pm; exit 131' QUIT
+
+    local pm_mid
+    echo 3 > "$VPC/powermode"; sleep 2
+    # Verify the transition was REAL. The premise of cycling is that a
+    # same-value write is a no-op the EC ignores; if the 3 never lands we
+    # have degenerated to a 255->255 write -- exactly the no-op that made
+    # the 2026-08-30 recovery fail, reproduced one level down.
+    pm_mid=$(cat "$VPC/powermode" 2>/dev/null || true)
+    [[ "$pm_mid" == "3" ]] || echo "legion-fan-curve: WARN - powermode read back '${pm_mid:-<empty>}' after writing 3; the 3->255 cycle may be degenerate" >&2
+
+    echo 255 > "$VPC/powermode"; sleep 2
+    trap - EXIT INT TERM HUP QUIT
+    unset -f _restore_pm
+    # The mode transition can disturb the override flags; re-normalise them
+    # here so every caller gets a clean state. The drift checker monitors
+    # neither flag, so nothing else would catch a stuck one.
+    echo 0 > "$VPC/fan_fullspeed"
+    echo 0 > "$VPC/lockfancontroller"
+}
 
 # 2. Engage custom mode at the EC (powermode=255 → driver translates to EC=3
 #    via the EC access path enabled by legion-flattop-patches.sh patch #2).
@@ -249,7 +323,8 @@ validate_curve() {
     return 0
 }
 
-# STATIC SELF-TEST of the constants, before we touch the EC at all.
+# STATIC SELF-TEST of the constants, before any curve write or mode cycle
+# (steps 1-2 above have already cleared the override flags and written 255).
 # Both tables are checked on every run, not just the one this boot happens to
 # select -- otherwise a typo in the size-9 fallback would lie dormant until a
 # suspend/resume collapsed the curve, and would then make the RECOVERY path
@@ -259,6 +334,39 @@ for _sz in 10 9; do
     validate_curve "size-$_sz table" || { echo "legion-fan-curve: refusing to write a bad curve" >&2; exit 1; }
 done
 unset _sz
+
+# 2b. POWER-TABLE REFRESH (2026-11-04). Measured: an AC unplug/replug while the
+#    EC sits in custom mode can leave the SMU on a reduced power table --
+#    sustained limit binding at ~25 W package instead of the ~60 W measured
+#    healthy (70 W configured), all-core 2.5 GHz instead of 3.8 GHz -- while
+#    the WMI readback still says 70/88 W. Writing 255 when already at 255
+#    (step 2) is a no-op at the EC, so it never re-pushes the table; that
+#    silent clamp lasted ~20 days (10-15 20:24 -> 11-04). A real mode
+#    transition restores it. Reproduced on demand 2026-11-04 22:35 (replug ->
+#    SPL clamp at 25 W, 10/10 samples).
+#    Only legion-fancurve-ac.service passes the flag, but that unit runs more
+#    often than "AC connect": udev fires it at every boot on AC (the rule has
+#    no ACTION clause), PPD's ExecStartPost drop-in starts it on every PPD
+#    start, and the installer starts it whenever this script changes. It also
+#    started twice with no identified trigger -- no plug in the kernel log, no
+#    sudo, no PPD start, no boot (10-23 16:59, 11-04 22:46; 2 of 9 starts in
+#    the journal 10-15 -> 11-04). Presumably ADP0 "change" uevents; NOT
+#    confirmed. On a PPD start the cycle is redundant (step 2 was already a
+#    real transition)
+#    and its ~2 s in mode 3 can make PPD ADOPT "performance" -- i.e. override
+#    a non-performance profile chosen on AC. Accepted: performance on AC is the
+#    expected state (legion-fan-curve-check NOTICEs otherwise).
+#    Placed AFTER the static self-test, so a bad table can never cycle the EC
+#    (which rebuilds the stock curve) and then abort. Skipped on battery, where
+#    the reduced table is expected and the cycle buys nothing.
+if [[ "$REFRESH_POWER_TABLE" == 1 ]]; then
+    if [[ "$(cat /sys/class/power_supply/ADP0/online 2>/dev/null || true)" == "1" ]]; then
+        echo "legion-fan-curve: AC online - forcing a powermode 3->255 cycle to refresh the EC power table"
+        powermode_cycle
+    else
+        echo "legion-fan-curve: --refresh-power-table given but AC is not online (or unreadable); skipping the cycle"
+    fi
+fi
 
 SIZE=$(read_curve_size)
 if ! select_curve "$SIZE"; then
@@ -313,59 +421,13 @@ if ! select_curve "$SIZE"; then
     if ! select_curve "$SIZE"; then
         echo "legion-fan-curve: auto_points_size did not grow the curve (still '${SIZE:-<empty>}'); falling back to a powermode 3->255 cycle" >&2
 
-        # TRAP FIRST, and it is not optional. Between the two writes below the
-        # EC sits in PERFORMANCE mode = the stock curve. `sleep` is an
-        # interruptible foreground child and bash dies on SIGTERM/SIGINT by
-        # default, so without this a Ctrl-C, a `systemctl stop`, a shutdown, or
-        # an earlyoom signal in that ~2 s window would strand the EC on the
-        # stock curve with NOTHING to put it back -- the drift checker is
-        # alert-only by design. That is this script making things WORSE than
-        # not running. Handler is idempotent, so it is harmless on success.
-        #
-        # ⚠️ The handlers EXIT rather than just running a command. A bare
-        # `trap '<cmd>' TERM` runs the command and then RESUMES the script,
-        # swallowing the signal. Both curve units carry TimeoutStopUSec=10s, so
-        # a swallowed TERM does not hang shutdown (an earlier version of this
-        # comment claimed it would -- wrong); the real cost is that systemd
-        # escalates to SIGKILL at 10 s, and SIGKILL runs NO handler, so the EC
-        # would be stranded at powermode 3 after all. Caught by testing the
-        # trap instead of assuming it. Residual uncoverable paths: SIGKILL and
-        # power loss.
-        # EXIT restores only; the signal traps restore and exit with the
-        # conventional 128+signo so systemd still sees a signal death.
-        # Restores BOTH powermode and the override flags: lockfancontroller=1
-        # freezes the fans at their current PWM, and a repair runs at idle with
-        # fans parked low, so leaving it set is worse than doing nothing.
-        _restore_pm() {
-            echo 255 > "$VPC/powermode" 2>/dev/null || true
-            echo 0 > "$VPC/fan_fullspeed" 2>/dev/null || true
-            echo 0 > "$VPC/lockfancontroller" 2>/dev/null || true
-        }
-        trap '_restore_pm' EXIT
-        trap '_restore_pm; exit 130' INT
-        trap '_restore_pm; exit 143' TERM
-        trap '_restore_pm; exit 129' HUP
-        trap '_restore_pm; exit 131' QUIT
-
-        echo 3 > "$VPC/powermode"; sleep 2
-        # Verify the transition was REAL. The premise of cycling is that a
-        # same-value write is a no-op the EC ignores; if the 3 never lands we
-        # have degenerated to a 255->255 write -- exactly the no-op that made
-        # the 2026-08-30 recovery fail, reproduced one level down.
-        pm_mid=$(cat "$VPC/powermode" 2>/dev/null || true)
-        [[ "$pm_mid" == "3" ]] || echo "legion-fan-curve: WARN - powermode read back '${pm_mid:-<empty>}' after writing 3; the 3->255 cycle may be degenerate" >&2
-
-        echo 255 > "$VPC/powermode"; sleep 2
-        trap - EXIT INT TERM HUP QUIT
-        unset -f _restore_pm
-        # Re-normalise the override flags BEFORE the size re-check, not after.
-        # The mode transition can disturb them, and lockfancontroller=1 FREEZES
-        # the fans at their current PWM. Doing this after the `exit 1` below
-        # would leave a failed repair with frozen fans on an uncapped curve --
-        # strictly worse than the incident this path exists to fix. The drift
-        # checker monitors neither flag, so nothing else would catch it.
-        echo 0 > "$VPC/fan_fullspeed"
-        echo 0 > "$VPC/lockfancontroller"
+        # The cycle itself (traps, mid-transition verify, flag re-normalise)
+        # lives in powermode_cycle() above, shared with --refresh-power-table.
+        # It re-normalises the override flags BEFORE the size re-check below,
+        # not after: lockfancontroller=1 FREEZES the fans at their current PWM,
+        # and doing it after the `exit 1` would leave a failed repair with
+        # frozen fans on an uncapped curve.
+        powermode_cycle
 
         SIZE=$(read_curve_size)
         if ! select_curve "$SIZE"; then

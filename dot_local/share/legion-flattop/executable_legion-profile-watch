@@ -62,9 +62,16 @@ HOW:
 
 No feedback loop: the curve script writes 255, which PPD reads back as
 platform_profile "custom" and ignores (ppd-driver-platform-profile.c maps
-"custom" to PPD_PROFILE_UNSET). Only the script's size-recovery 3->255 cycle
-can make PPD emit a change; after it PPD holds "performance", so the next
-cycle is silent: at most one extra run.
+"custom" to PPD_PROFILE_UNSET). Only a 3->255 cycle can make PPD emit a
+change -- the script's size recovery, and (since 2026-11-04) the
+--refresh-power-table cycle legion-fancurve-ac.service runs while on AC at
+every boot, PPD start, replug, script-changing installer run and the
+occasional start with no identified trigger; after one, PPD holds
+"performance", so the next cycle is silent: at most one extra run. That AC
+cycle also holds
+powermode 3 for ~2 s, which a poll (or the post-run re-check here) can catch
+and count as ONE "unexplained" repair per AC event -- harmless against
+CHURN_MAX unless the adapter is replugged repeatedly within CHURN_WINDOW_S.
 """
 
 import os

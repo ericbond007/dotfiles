@@ -17,11 +17,27 @@ Type=oneshot
 # CPU 70 W sustained / 88 W boost, GPU cTGP 10 / PPAB 15 in both). The only
 # difference is custom keeps our quiet fan curve instead of the stock one. So
 # this gives performance-tier power AND the safe curve — that is the whole point.
+#
+# ⚠️ 2026-11-04: "identical limits" holds only after a REAL mode transition. An
+# AC replug while already in custom can leave the SMU on a reduced table (~25 W
+# sustained, all-core 2.5 GHz) that a plain 255 write never refreshes, because
+# 255 -> 255 is a no-op at the EC. That clamp ran silently for ~20 days. Hence
+# --refresh-power-table: on AC it forces a powermode 3 -> 255 cycle (~4 s, ~2 s
+# of it on the stock curve) before the curve is written. See the script, step 2b.
+# This unit also runs at every boot on AC (udev coldplug), on every PPD start
+# (the ExecStartPost drop-in), on installer runs that change the script, and
+# occasionally with no identified trigger (2 of 9 starts, 10-15 -> 11-04: no
+# plug in the kernel log, no sudo, no PPD start; presumably ADP0 "change"
+# uevents, not confirmed). On a PPD start the cycle is redundant and may make
+# PPD adopt "performance" -- accepted, that is the expected profile on AC. On
+# battery the cycle is skipped. Each retry below passes the flag, so a run that
+# needs all 3 attempts cycles up to 3 times (~6 s on the stock curve in total).
 ExecStartPre=/bin/sleep 3
 # 2026-10-09: retry in place. One verification lost to a concurrent PPD write is
 # not worth a critical "FAILED" popup; three in a row is. (legion-profile-watch
 # repairs profile changes independently; the script's flock serialises them.)
-ExecStart=/bin/sh -c 'for i in 1 2 3; do /opt/services/legion-flattop/bin/legion-fan-curve.sh && exit 0; sleep 3; done; exit 1'
-# Bounded: 3 x (60 s flock wait + ~10 s run) + sleeps. A hung run must not
-# wedge this unit forever.
+ExecStart=/bin/sh -c 'for i in 1 2 3; do /opt/services/legion-flattop/bin/legion-fan-curve.sh --refresh-power-table && exit 0; sleep 3; done; exit 1'
+# Bounded: 3 x (60 s flock wait + ~14 s run, ~19 s if size recovery also
+# cycles) + sleeps ~= 249 s worst case, under the 300 s cap. A hung run must
+# not wedge this unit forever.
 TimeoutStartSec=300
