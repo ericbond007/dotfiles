@@ -37,7 +37,8 @@
 # Host-conditional hook blocks (Dave, 2026-11-04, aiImprove audit §3.7 "serp hooks"):
 #   wanda + serpentii (the service hosts; serp reports hostname "serpentii"): block-service-owned-files,
 #     firewall-validate, pre-commit-secrets-scan, firewall-post-edit — each guards something both hosts
-#     have (nftables; a /opt/services git repo with service-owned files). The Claude-side secrets scan
+#     have (nftables; a /opt/services git repo with service-owned files). The two edit blockers also
+#     watch NotebookEdit (notebook_path) since 2026-11-05. The Claude-side secrets scan
 #     covers a commit of an already-staged index only; the usual add-and-commit form is covered just by
 #     the repo's own .githooks/pre-commit, which both service hosts carry (serp since 2026-11-04).
 #   wanda only: block-generated-files (rendered-secret .tpl pairs exist only there) and
@@ -78,8 +79,8 @@ MANAGED='{
     "PreToolUse": [
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/chezmoi-preflight.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/bash-guards.sh" } ] }{{ if eq .chezmoi.hostname "wanda" }},
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] }{{ end }}{{ if or (eq .chezmoi.hostname "wanda") (eq .chezmoi.hostname "serpentii") }},
-      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
+      { "matcher": "Edit|Write|NotebookEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-generated-files.sh" } ] }{{ end }}{{ if or (eq .chezmoi.hostname "wanda") (eq .chezmoi.hostname "serpentii") }},
+      { "matcher": "Edit|Write|NotebookEdit", "hooks": [ { "type": "command", "command": "~/.claude/hooks/block-service-owned-files.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/firewall-validate.sh" } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "~/.claude/hooks/pre-commit-secrets-scan.sh" } ] }{{ end }}
     ],

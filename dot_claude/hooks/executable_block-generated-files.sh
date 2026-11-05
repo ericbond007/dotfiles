@@ -1,16 +1,16 @@
 #!/bin/bash
 # Block edits to generated secret files — edit the .tpl source instead
-# Triggered by Claude Code PreToolUse on Edit/Write
+# Triggered by Claude Code PreToolUse on Edit/Write/NotebookEdit
 
 set -euo pipefail
 
 INPUT=$(cat)
 
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')   # NotebookEdit sends notebook_path (2026-11-05)
 
-# Only check Edit/Write tools (MultiEdit dropped 2026-11-03 — the tool no longer exists).
-if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" ]]; then
+# Only check Edit/Write/NotebookEdit tools (MultiEdit dropped 2026-11-03 — the tool no longer exists).
+if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" && "$TOOL" != "NotebookEdit" ]]; then
   exit 0
 fi
 

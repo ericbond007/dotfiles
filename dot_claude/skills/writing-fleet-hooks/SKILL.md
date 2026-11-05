@@ -23,7 +23,7 @@ Claude Code and Codex hooks on this fleet are managed through chezmoi. Scripts l
 ## Hook script contract
 
 - **Input:** JSON on stdin. Relevant fields per event:
-  - `PreToolUse`/`PostToolUse`: `tool_name`, `tool_input.file_path` (Edit/Write; `NotebookEdit` sends `notebook_path` and is NOT covered by the blockers), `tool_input.command` (Bash), `cwd`
+  - `PreToolUse`/`PostToolUse`: `tool_name`, `tool_input.file_path` (Edit/Write) or `tool_input.notebook_path` (NotebookEdit — the two edit blockers, `block-generated-files` on wanda and `block-service-owned-files` on wanda+serp, read both since 2026-11-05 and are registered on `Edit|Write|NotebookEdit`), `tool_input.command` (Bash), `cwd`
   - `Notification`: `message`, `title`, `notification_type`
   - `SessionEnd`: `session_id`, `cwd`, `reason`
 - **Exit codes and what reaches the MODEL** (hook docs; relearned 2026-11-04 when `firewall-post-edit.sh` turned out to have been printing to nobody):
@@ -142,7 +142,7 @@ The `{{ if ... }},` pattern puts the comma *inside* the conditional so the share
 
 | Intent | Matcher |
 |---|---|
-| Any file edit | `Edit\|Write` (MultiEdit no longer exists; NotebookEdit is a separate tool) |
+| Any file edit | `Edit\|Write` (MultiEdit no longer exists); a PATH guard adds `\|NotebookEdit` and reads `notebook_path` too |
 | Shell commands only | `Bash` |
 | Everything | `*` (or omit — empty matcher matches all) |
 | Specific tool | exact name, e.g. `Read`, `Grep` |

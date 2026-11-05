@@ -39,6 +39,10 @@ chk "settings.json.tmpl under dot_claude"         "$(edit /h/.local/share/chezmo
 chk "package.json, no review"                     "$(edit /x/package.json)"                                         BLOCK
 chk "CLAUDE.md, no review"                        "$(edit /h/.claude/CLAUDE.md)"                                    BLOCK
 chk "skill reference .md, no review"              "$(edit /h/.local/share/chezmoi/dot_claude/skills/x/references/brief.md)" BLOCK
+chk "agent definition .md, no review"             "$(edit /h/.local/share/chezmoi/dot_claude/agents/fleet-security-auditor.md)" BLOCK
+chk "deployed agent .md, no review"               "$(edit /h/.claude/agents/x.md)"                                 BLOCK
+chk "CLAUDE-origins.md, no review"                "$(edit /h/.claude/CLAUDE-origins.md)"                            BLOCK
+chk "unrelated /agents/ notes.md, no review"      "$(edit /h/projects/x/agents/notes.md)"                            allow
 chk "README.md, no review"                        "$(edit /x/README.md)"                                            BLOCK
 chk "review BEFORE a tpl edit (stale review)"     "$(agent 'Cold review of spec')
 $(edit /x/deploy/jail.env.tpl)"                                                                                     BLOCK

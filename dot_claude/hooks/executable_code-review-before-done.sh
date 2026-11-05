@@ -97,8 +97,9 @@ read -r last_edit last_review last_kind < <(
             or test("/(docs|specs|plans|runbooks|wiki)/.*\\.md$"; "i")
             or test("(^|/)([^/]*[-_.])?(spec|plan|design|runbook|cutover|readme)s?([-_.][^/]*)?\\.md$"; "i")
             or test("\\.(service|timer|socket|path|mount|rules|conf|toml|ini|nft|env)$")
-            or test("(^|/)(CLAUDE|AGENTS)\\.md$")
+            or test("(^|/)(CLAUDE|AGENTS|CLAUDE-origins)\\.md$")
             or test("/skills/.*\\.md$")
+            or test("/(dot_claude|\\.claude)/agents/.*\\.md$")
             or test("/(dot_claude|\\.claude)/.*settings\\.json$")));
     def artifact_edit($c):
       ($c.type? == "tool_use")
