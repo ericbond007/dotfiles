@@ -16,9 +16,9 @@ Rules:
 - Commit with `sudo git -C /opt/services` (root-owned).
 - After editing a service, commit **that service** deliberately with a real message. **NEVER `git add -A`** — that caused the 2026-05-25 "kitchen-sink" incident. The `services-config-commit` auto-commit timer is **disabled on purpose — leave it disabled**.
 - New top-level service dirs MUST get their data/secret files gitignored **before** committing (the pre-commit hook warns).
-- A tracked `core.hooksPath=.githooks` enforces:
-  - **pre-commit** secret scan on every commit — use `op://` refs, never plaintext.
-  - **post-commit** push to the serp mirror that emails on failure (#1420).
+- A repo-local `core.hooksPath=.githooks` (lives in `.git/config`; re-set it after any re-clone) enforces:
+  - **pre-commit** secret scan on every commit — use `op://` refs, never plaintext. Same file on wanda and on serp's `/opt/services` (since 2026-11-04, byte-identical; edit both or neither). Known false positive: Python that merely reads a token from env/args — Dave's `--no-verify` after a look.
+  - **post-commit** push to the serp mirror that emails on failure (#1420) — wanda only; serp mirrors to wanda's backup remote via `serp-git-backup.timer` (daily 03:30) instead.
 - The four nested app repos — `btown`, `jail/_src`, `ot-revisited`, `wiki` — were **excised** into their own backed-up repos (btown/wiki → `serp:/opt/git-backups/{btown,wiki}.git`; jailBird/ot-revisited → GitHub). They're gitignored — **don't re-add them**.
 - A daily `opt-services-drift-alert.timer` emails Dave if drift sits uncommitted >3 days (#1421).
 - Restore runbook: `/opt/services/wiki/docs/runbooks/opt-services-restore.md`.

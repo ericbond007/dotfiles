@@ -15,7 +15,7 @@ CWD=$(echo "$INPUT" | jq -r '.cwd')
 # COVERAGE LIMIT (2026-11-04): this is a PreToolUse scan of the INDEX as it is before the command runs,
 # so the fleet's usual `sudo git -C … add <paths> && sudo git -C … commit` form is NOT scanned — the add
 # has not happened yet. The real control for /opt/services is the repo's own .githooks/pre-commit
-# (core.hooksPath; wanda has it, serp does not). This hook catches a commit of an already-staged index.
+# (core.hooksPath; wanda since 2026-05, serp since 2026-11-04). This hook catches a commit of an already-staged index.
 GIT_COMMIT_RE='git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([^[:alnum:]_-]|$)'
 if ! printf '%s' "$COMMAND" | grep -qE "$GIT_COMMIT_RE"; then
   exit 0
