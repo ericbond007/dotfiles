@@ -111,7 +111,7 @@ Applies to any alert on openclaw, incident-triage-receiver, Alertmanager itself,
 
 **Prefer alerting on the failure line over staleness.** A "time since last success" heartbeat was rejected for The Claw: measured cadence was only ~3 heartbeats/24h plus sparse user traffic, so any false-positive-safe threshold would have been slower than the outage it was meant to catch.
 
-**Loki rules live in `/opt/services/loki/rules/fake/*.yml`** (owned `loki:loki`), ruler → `host.docker.internal:9093`. Restart `loki-loki-1` to load, then confirm at `/prometheus/api/v1/rules` that the group shows `health=ok` — a rule file that exists but is not evaluated is worthless. **Prove a new rule would have caught the incident** by replaying its expr over the incident window with `query_range`.
+**Loki rules live in `/opt/services/loki/rules/fake/*.yml`** (owned `loki:loki`), ruler → `host.docker.internal:9093`. No restart needed: the ruler re-reads that directory on its 1-minute poll (measured 2026-11-05: a deleted group was gone from `/prometheus/api/v1/rules` in ~45 s; note `/loki/api/v1/rules` only lists files on disk, so it proves nothing). Confirm at `/prometheus/api/v1/rules` that the group shows `health=ok` — a rule file that exists but is not evaluated is worthless. **Prove a new rule would have caught the incident** by replaying its expr over the incident window with `query_range`.
 
 ## 6. Proving an alert fires — without emailing Dave (silence first)
 
