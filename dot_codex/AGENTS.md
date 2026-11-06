@@ -74,8 +74,10 @@ Never expose secret values in arguments, logs, files, tickets, or memory.
   identity, monitoring, databases, mail, and Home Assistant.
 - **serp / serpentii** (`10.0.0.9`): Arch/KDE host, backup target, GPU worker;
   fish login shell. Full fleet member again since 2026-08-19 (Claude + shared
-  config apply). Kernel held at 6.19.11 (`IgnorePkg = linux linux-headers`):
-  any kernel bump needs the nvidia-580xx DKMS rebuild verified before reboot.
+  config apply). Kernel held at 7.2.14 with nvidia-580xx 580.196.07
+  (`IgnorePkg = linux linux-headers`; 580.196.07 reportedly fails on 7.3):
+  kernel and driver move together — build the AUR nvidia packages first, then
+  one `pacman -U` of both, and verify the module for the new kernel before reboot.
 - **balganor** (`10.0.0.8`): DEAD — decommissioned 2026-10-25 (last seen on
   the LAN 2026-07-21; cause never established). Was a media NAS + sync peer.
   Do not ssh, sync to or mount it; wiki `reference/incidents.md` → 2026-10-25.
