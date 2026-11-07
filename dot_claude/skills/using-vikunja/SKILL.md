@@ -10,13 +10,18 @@ Vikunja is Dave's self-hosted project tracker at **https://projects.ericbond.net
 ## Use the bundled client first
 
 ```bash
-VK="node <skill-dir>/scripts/vikunja.mjs"
-
-$VK list --project 6
-$VK audit --project 6 --repo /path/to/repo --rev master
-$VK get 1514
-$VK buckets --project 6
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs list --project 6
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs audit --project 6 --repo /path/to/repo --rev master
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs get 1514
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs buckets --project 6
 ```
+
+**Always call it by that literal path, one command per call** — not through a `VK=…`/`$VK`
+variable, `bash -c`, or a Python/shell wrapper. The fleet's Claude Code permission allow-rule
+(`Bash(node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs *)` and its absolute-path twin, in
+`modify_private_settings.json.tmpl`) matches only that form; any other form goes to the auto-mode
+classifier, which blocks Vikunja writes as external-system writes (Dave, 2026-11-07: grooming the
+board is allowed). For a multi-line `--description`, pass the text with `"$(cat FILE)"`.
 
 Do not write a fresh curl/Python/Node helper for routine Vikunja work. Use
 `scripts/vikunja.mjs`; it already handles pagination, 1Password authentication,
@@ -26,26 +31,26 @@ responses.
 Read-only commands:
 
 ```bash
-$VK list --project <id> [--all] [--json]
-$VK audit --project <id> [--repo <path>] [--rev master] [--json]
-$VK get <task-id> [task-id...]
-$VK views --project <id>
-$VK buckets --project <id> [--view <id>]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs list --project <id> [--all] [--json]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs audit --project <id> [--repo <path>] [--rev master] [--json]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs get <task-id> [task-id...]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs views --project <id>
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs buckets --project <id> [--view <id>]
 ```
 
 Mutation commands:
 
 ```bash
-$VK create --project <id> --severity low --title "..." --description "..."
-$VK edit <task-id> --severity medium --title "..." --description "..."
-$VK severity <task-id> [task-id...] --severity high
-$VK move <task-id> --project <id> --bucket todo|doing|done
-$VK start <task-id> --project <id> [--comment "..."]
-$VK done <task-id> --project <id> [--comment "..."]
-$VK comment <task-id> --text "..."
-$VK label-add <task-id> --label <label-id>
-$VK label-remove <task-id> --label <label-id>
-$VK relate <parent-id> <child-id> --kind subtask
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs create --project <id> --severity low --title "..." --description "..."
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs edit <task-id> --severity medium --title "..." --description "..."
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs severity <task-id> [task-id...] --severity high
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs move <task-id> --project <id> --bucket todo|doing|done
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs start <task-id> --project <id> [--comment "..."]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs done <task-id> --project <id> [--comment "..."]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs comment <task-id> --text "..."
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs label-add <task-id> --label <label-id>
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs label-remove <task-id> --label <label-id>
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs relate <parent-id> <child-id> --kind subtask
 ```
 
 Run the script with `--help` for the complete syntax. Pass `--view` only when a

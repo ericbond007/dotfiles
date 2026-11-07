@@ -28,6 +28,14 @@
 #     A non-object `.permissions` is treated as absent (`objects // {}`).
 # Per-host runtime permission grants belong in settings.local.json (not
 # chezmoi-tracked) per CLAUDE.md, so force-replacing .permissions.allow is correct.
+# The vikunja.mjs allows (Dave, 2026-11-07: "you are absolutely allowed to groom the board"): auto
+# mode's classifier blocked a "check VK" grooming batch as an external-system write. The two rules
+# (absolute path and ~/ form) admit only the bundled Vikunja client, called by its literal path — not
+# node in general, not a `$VK` variable, and not a script that shells out to it; those still go to
+# the classifier, so the using-vikunja skill tells Claude to call the full path. They apply on EVERY
+# host: on flattop (auto mode) they skip the classifier; on wanda/serp (defaultMode "default") they
+# remove the prompt. The client has no task/project delete (its one DELETE removes a label); Bash
+# hooks (bash-guards, the service-host hooks) still run first and can still block.
 # NOTE: on flattop `chezmoi status` shows this file as `MM` even when nothing
 # needs changing: Claude Code rewrites it in its own key order, we emit `jq -S`
 # sorted keys. The success test for this script is a SEMANTIC diff (`jq -S`
@@ -68,7 +76,9 @@ MANAGED='{
       "Bash(pactl *)",
       "Bash(echo *)",
       "Bash(tuned-adm *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(node {{ .chezmoi.homeDir }}/.claude/skills/using-vikunja/scripts/vikunja.mjs *)",
+      "Bash(node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs *)"
     ]{{ if ne .chezmoi.hostname "flattop" }},
     "defaultMode": "default"{{ end }}
   },
