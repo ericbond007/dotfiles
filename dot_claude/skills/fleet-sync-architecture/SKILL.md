@@ -14,6 +14,7 @@ The fleet (flattop/wanda/serp, plus living-pi as a Claude-Code-less sync peer; b
 | `~/.local/share/chezmoi/` | chezmoi source tree (git repo) — the canonical state |
 | `github.com:ericbond007/dotfiles` | shared hub; configured peers push/pull from `origin/master` |
 | `~/.claude/hooks/*.sh` | rendered working copies (what Claude Code invokes) |
+| `~/.claude/hooks/statusline.js` | the Claude Code statusline, installed on flattop/wanda/serp (the settings template seeds `statusLine` where the key is absent — never enforced; flattop keeps its own fnm node path); also writes `~/.claude/cache/usage-cache.json`, the plasma usage widget's live-usage source on flattop. Tests: `node --test ~/.claude/hooks/tests/statusline.test.js`. Rollback is not a revert — wiki `reference/incidents.md` → 2026-11-07 |
 | `~/.claude/settings.json` | co-managed by `dot_claude/modify_private_settings.json.tmpl` (modify_ script: chezmoi owns `hooks` + `permissions.allow`, pins `permissions.defaultMode`=`default` off-flattop only; other `permissions.*` keys and the runtime keys are Claude Code's; hostname conditionals) |
 | `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/CLAUDE.md` | all chezmoi-tracked — same on every host |
 | `~/.claude/CLAUDE-origins.md` | companion to CLAUDE.md: the incident narratives moved out of it (2026-11-03); chezmoi-synced, NOT auto-loaded; every `→ origin:` pointer in CLAUDE.md resolves to a heading here (`hooks/tests/claude-md-pointers.test.sh`) |
