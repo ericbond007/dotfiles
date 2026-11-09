@@ -18,7 +18,7 @@ description: >-
 When you stand up a new service, wire it into monitoring **before** calling it done. The fleet has a deliberate split that's easy to get backwards:
 
 - **blackbox-exporter = the single synthetic-check ALERT source.** `probe_success == 0` routes through Alertmanager → **email** (The Claw is dead: its `incident-triage` routes were removed on 2026-10-21, and `warning` and `critical` both email now). This is the one alert engine.
-- **Uptime Kuma = status-page UI ONLY** (`uptime.ericbond.net`). It does **NOT** drive alerts. Do not re-add a Kuma→Prometheus alert rule — that double-alerts (`KumaMonitorDown` was removed for this reason).
+- **Uptime Kuma = status-page UI ONLY** (`uptime.ericbond.net`). It does **NOT** drive alerts. Do not re-add a Kuma→Prometheus alert rule — that double-alerts (`KumaMonitorDown` was removed for this reason). Its own email is off except for the `KEEP_EMAIL` monitors (§ 2).
 
 Both do "is it up" synthetic checks; running both as alert engines was redundancy that got removed. Blackbox wins as the engine (Grafana history, cert-expiry, content-matching, already wired to triage); Kuma's value is just the human dashboard.  *(2026-10-21: "triage" here means the Alertmanager → email path; The Claw is dead.)*
 
@@ -70,6 +70,14 @@ ssh wanda 'docker kill -s HUP blackbox-exporter'
 
 Prometheus also runs with `--web.enable-lifecycle`, so `POST http://127.0.0.1:9090/-/reload` works as an alternative (blackbox exposes the same on :9115). SIGHUP is the simplest and needs no host-port reachability. After reloading, confirm the new probe is live — its target shows `UP` and `probe_success == 1` in Prometheus.
 
+Two traps (2026-11-08, VK #2461):
+- **`prometheus.yml` and `blackbox.yml` are single-file bind mounts.** An editor save-as, `mv` or `install` replaces the inode, and the container keeps reading the old file. Write in place (`cat new > file`) and check the in-container sha (`docker exec … sha256sum /etc/prometheus/prometheus.yml`).
+- **Read the reload result from `:9090/metrics` (or `:9115/metrics`) directly.** A PromQL query of `prometheus_config_last_reload_success_timestamp_seconds` shows the last *self-scrape*, which can lag the reload by a scrape interval.
+
+Validate before the HUP:
+- Prometheus: `docker exec -i prometheus-prometheus-1 sh -c 'cat > /tmp/p.yml && promtool check config --lint-fatal /tmp/p.yml' < candidate`, judged by promtool's own exit code.
+- blackbox: its container is read-only, so run `--config.check` in a throwaway container from the same image. It rejects bad regexes and unknown fields, but **not** a bad prober name, so calibrate each new module on a known-good and a known-bad target with `curl '127.0.0.1:9115/probe?module=M&target=T'`.
+
 ### SSO-gated content checks
 
 Kuma **cannot** auth through Authelia — its axios client strips the reserved `Proxy-Authorization` header, so requests arrive `<anonymous>`. Blackbox does **not** strip it. So for an authenticated content check behind SSO, use a blackbox probe carrying the header + a dedicated lldap service account — not Kuma. (For Traefik specifically, router data is already in Prom as `traefik_router_requests_total` — don't duplicate it.)
@@ -77,6 +85,14 @@ Kuma **cannot** auth through Authelia — its axios client strips the reserved `
 ## 2. Add the Uptime Kuma monitor (status page only)
 
 Add a monitor at `uptime.ericbond.net` for the human dashboard — `uptime-kuma-api` with the 1Password **"Uptime Kuma Admin"** login. Remember: this is UI only; blackbox is what pages.
+
+**Kuma's own email (VK #2461, 2026-11-08).** Kuma's SMTP notification mails Dave directly, past Alertmanager and every silence (6 mails during the 2026-11-08 failover drills). So:
+- "Email" is not the default for new monitors.
+- It stays bound only to the monitors named in `KEEP_EMAIL` in `/opt/services/uptime-kuma/scripts/bootstrap.py`. Today that is 17 "Prometheus" (nothing else sees Prometheus down) and 24 "jailbeat error-rate synthetic" (≥ 2 of 12 cache-busted 5xx, which no blackbox probe sees).
+- Don't bind it to a new monitor. Give the check a blackbox probe instead.
+- The bootstrap is the declarative source. Edit it, run `--dry-run`, then run it.
+- uptime_kuma_api 1.2.1 takes `notificationIDList` as a **list of ids**: its input conversion turns every element or dict key into `{id: True}`, so a dict `{id: False}` **binds**.
+- Monitors made in the UI can carry `dns_resolve_type` NULL, which the library rejects on edit. The bootstrap pre-checks every edit and sends nothing if one fails.
 
 ## 3. Prometheus metrics
 
