@@ -37,3 +37,11 @@ Origin: 2026-06-13, **#1240** — ticket said "investigate the root source of Ma
 *Moved from CLAUDE.md § "Inspect AUR PKGBUILDs before installing", 2026-11-03. CLAUDE.md keeps the rule and the shape of the campaign (adopted/orphaned packages, largely via updates); this is the full sentence with the payload and the victim count. The IOC battery and the 2026-06-15 baseline sweep are in the `fleet-security-auditor` agent.*
 
 The 2026-06-11 **"Atomic Arch" / atomic-lockfile** campaign pushed malware (Rust infostealer — Discord/GitHub-PAT/npm/Slack/Teams/SSH/Vault/Docker creds + browser cookies — plus a cryptominer, an eBPF rootkit, and systemd persistence) through adopted/orphaned packages largely via **updates** — so both fresh installs and routine upgrades are vectors; by 2026-06-15 the consolidated victim list had grown to **~1,619 packages**.
+
+## One numbering sequence per message — 2026-10-28 → 2026-11-11
+
+*Promoted 2026-11-11 from jailBird's project memory, `~/.claude/projects/-home-eric-projects-jailBird/memory/feedback_unique_choice_numbers.md` on flattop (per-host, not synced), which sessions outside jailBird never loaded.*
+
+- **2026-10-28, jailBird.** I asked two decisions in one message, under headings "Decision 1: ruling 19" (options 1–3) and "Decision 2: how to run the build" (options 1–2). Dave: *"are you asking me two questions with the same numbers? how in the hell am I supposed to answer that?"* He answers by number, so a repeated number makes his answer ambiguous and costs a round trip.
+- **2026-11-10, jailBird.** To avoid an option 11 that existed only in the spec, I numbered one list's options `9.`, `10.`, `13.`. Dave's screen showed 9, 10, **11** (a Markdown ordered list keeps only its first number), and he answered with 11 three times while I asked which option he meant. Hence "a new option takes the next number in its own list".
+- **2026-11-11, pzServer.** Because the rule lived only in jailBird's memory, a pzServer session asked two questions under bold headings "1." and "2.", with options 1–4 and 1–3. Dave: *"lol you gave me two sets of the same number questions, ask those again. I thought we had a claude rule that says to stop doing that?"* Promoted to the fleet CLAUDE.md the same day.
