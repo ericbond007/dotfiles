@@ -136,7 +136,9 @@ Applies to any alert on openclaw, incident-triage-receiver, Alertmanager itself,
 - **Silence first.** Put a silence in place BEFORE the deliberate firing.
   - Match the test firing's labels as narrowly as possible.
   - Set `endsAt` just past the expected resolve, and extend it if the alert is still firing.
-  - Expire it only after `/api/v2/alerts` shows the alert resolved or gone. Expiring it while the alert still fires is a lapse.
+  - Expire it only when the test alerts are gone from the rule's own evaluator as well as from Alertmanager: on wanda, `curl -s 127.0.0.1:9090/api/v1/alerts` for a Prometheus rule, or `curl -s 127.0.0.1:3100/prometheus/api/v1/alerts` for a Loki-ruler rule, lists none of them as `pending` or `firing`, and `/api/v2/alerts` no longer lists them. Expiring it while an alert still fires is a lapse.
+    - Alertmanager's list says nothing about pending alerts. A **pending** alert (still inside its `for:`) never reaches Alertmanager, so it is absent there right up to the moment it fires, and expiring the silence then lets that firing email Dave. In the 2026-11-12 AppNotOnForwardedPort proof, 15 min in, Alertmanager held 2 of the 4 test alerts; the other 2 were still pending in Prometheus and fired 5–6 min later.
+    - Removing the test input does not end the alert at once. For a `*_over_time(…[w])` rule the condition stays true for up to `w` after the last test sample (so a pending alert can still fire after the input is gone), and a rule with `keep_firing_for` stays firing that much longer again. Size `endsAt` as: last test sample + `w` + `keep_firing_for` + one `group_interval` (5 min). For the AppNotOnForwardedPort rules (`[15m]`, `keep_firing_for: 15m`) that is about 35 min after the input is removed.
   - Put it in before the firing reaches Alertmanager: a new critical alert's first email goes out 10 s after it arrives.
   - A silenced alert sends neither its firing email nor its "resolved" email.
   - If the silence lapses while the alert is still firing, the group's next flush emails it, within 5 min (`group_interval`), whatever the severity. Nothing arriving 2 minutes after a lapse does not mean you're safe.
