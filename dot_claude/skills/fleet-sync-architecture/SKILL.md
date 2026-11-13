@@ -1,6 +1,6 @@
 ---
 name: fleet-sync-architecture
-description: Use when debugging or reasoning about how the fleet (flattop/wanda/serp + living-pi as an agent-less peer; bondo and balganor are dead) shares Claude Code and Codex configuration via chezmoi, including what is canonical, what is per-host, shared skills/hooks, why an edit did or did not propagate, or onboarding a new host. Reference for the chezmoi+GitHub topology; not needed for routine edits.
+description: Use when debugging or reasoning about how the fleet (flattop/wanda/serp + living-pi as an agent-less peer; balganor is dead; bondo is back on the LAN but not a sync peer) shares Claude Code and Codex configuration via chezmoi, including what is canonical, what is per-host, shared skills/hooks, why an edit did or did not propagate, or onboarding a new host. Reference for the chezmoi+GitHub topology; not needed for routine edits.
 ---
 
 # Fleet sync architecture

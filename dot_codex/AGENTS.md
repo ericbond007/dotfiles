@@ -86,8 +86,15 @@ Never expose secret values in arguments, logs, files, tickets, or memory.
   ext4 read error aborted the journal on 2026-08-22 and `/` has been read-only
   (`emergency_ro`) since, so writes, including `chezmoi update`, fail there
   (wiki `hosts/living-pi.md`).
-- **bondo** (`10.0.0.11`): DEAD — decommissioned 2026-10-07 (last seen
-  2026-09-04). Its standby/replica/transcriber roles are vacant; do not use it.
+- **bondo** (`10.0.0.11`, Wi-Fi `10.0.0.232`): back on the LAN on purpose
+  (Dave, 2026-11-12; up since 2026-11-03) after going dark 2026-09-04 and being
+  decommissioned 2026-10-07. Its standby units ran again until switched off
+  on 2026-11-07 and its transcriber until 2026-11-10, so serp is the only
+  transcriber and wanda has no standby. Still running: its HA-snapshot pull
+  (`ha-sync`), the `wanda-deadman` switch (meant to email Dave when wanda is
+  down; send path untested) and `opt-services-drift-alert` (a nightly email
+  about drift in bondo's stale `/opt/services` copy). It is not in the
+  chezmoi sync; restoring anything is Dave's call (wiki `hosts/bondo.md`).
 
 Most custom services live on wanda. On wanda, serp and living-pi `/etc` is
 etckeeper-managed (flattop's is not; living-pi's cannot take new commits while

@@ -13,7 +13,8 @@ self=$(hostname -s)
 # LAN-only names. The bare `serp` and `living-pi` hostnames resolve to
 # the WAN IP (router/dropbear) via DNS — `serpentii` and 10.0.0.10 force
 # the LAN path so we sync the actual boxes, not the gateway. bondo was
-# removed 2026-10-07: the host is dead (last seen 2026-09-04), not returning.
+# removed 2026-10-07 while it was down (last seen 2026-09-04); it is back on
+# the LAN since 2026-11-03 but has not been re-added (Dave's call).
 # balganor was removed 2026-10-25: dead too (last seen 2026-07-21).
 peers=(serpentii wanda flattop 10.0.0.10)
 

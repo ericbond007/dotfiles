@@ -103,7 +103,7 @@ Containers are already covered by **cAdvisor** (`job_name: cadvisor`). Add a **d
 Silent scheduled-job death is a recurring fleet failure class (config-backup dark 6 days; living-pi 12 days). Two rules:
 
 - **`systemctl enable --now`, never bare `enable`.** Bare `enable` only symlinks the timer into `timers.target.wants` — it does NOT start it until the next reboot, so on a long-uptime box an enabled timer sits `inactive` and never fires. Then **confirm**: `systemctl is-active <timer>`.
-- **Critical job? Add it to the watchdog.** Append the unit name (without `.timer`) to the host's `CRITICAL` list in `/opt/services/ops/systemd-timer-watchdog.sh` (host-aware: `wanda*` / `serp*` cases; its `bondo*` case is dead — bondo was decommissioned 2026-10-07). The `timers` Prometheus rule group then pages The Claw on enabled-but-inactive / stale-past-2.5×-cadence / non-zero-exit.
+- **Critical job? Add it to the watchdog.** Append the unit name (without `.timer`) to the host's `CRITICAL` list in `/opt/services/ops/systemd-timer-watchdog.sh` (host-aware: `wanda*` / `serp*` cases; its `bondo*` case still runs on bondo's own stale 2026-08-23 copy of the script, but nothing scrapes bondo, so it alerts no one). The `timers` Prometheus rule group then pages The Claw on enabled-but-inactive / stale-past-2.5×-cadence / non-zero-exit.
 
 Why the watchdog is necessary: `node_systemd_timer_last_trigger_seconds` is **not collected** (node-exporter's systemd collector excludes `.timer` units), and `SystemdUnitFailed` only catches `failed`, not `inactive`. The watchdog's textfile metrics (`systemd_timers.prom`) are what actually cover timer liveness.
 
