@@ -36,6 +36,7 @@ node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs audit --project <id> [--
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs get <task-id> [task-id...]
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs views --project <id>
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs buckets --project <id> [--view <id>]
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs projects [--json]
 ```
 
 Mutation commands:
@@ -45,6 +46,7 @@ node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs create --project <id> --
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs edit <task-id> --severity medium --title "..." --description "..."
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs severity <task-id> [task-id...] --severity high
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs move <task-id> --project <id> --bucket todo|doing|done
+node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs transfer <task-id> --project <dest-id> [--bucket todo|doing|done]
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs start <task-id> --project <id> [--comment "..."]
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs done <task-id> --project <id> [--comment "..."]
 node ~/.claude/skills/using-vikunja/scripts/vikunja.mjs comment <task-id> --text "..."
@@ -109,7 +111,7 @@ POSTing to a different bucket replaces the existing assignment automatically (wi
 
 ### Cross-project task moves
 
-A task moved to a different project needs both `project_id` updated AND a fresh bucket assignment (the old bucket belongs to the old project's view):
+A task moved to a different project needs both `project_id` updated AND a fresh bucket assignment (the old bucket belongs to the old project's view). The client's `transfer` command does both (it resolves the destination bucket before writing, so a bad bucket name moves nothing; a done task defaults to the destination's done bucket so it is not reopened, and the output reports `done`); use `move` to re-bucket a task within its current project. The raw API shape:
 
 ```python
 t = http("GET", f"/tasks/{tid}")

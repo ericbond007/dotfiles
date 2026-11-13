@@ -68,6 +68,8 @@ function usage(message) {
   vikunja.mjs severity <task-id> [task-id...] --severity <critical|high|bug|medium|low|backlog>
   vikunja.mjs comment <task-id> --text <text>
   vikunja.mjs move <task-id> --project <id> --bucket <name> [--view <id>]
+  vikunja.mjs transfer <task-id> --project <dest-id> [--bucket <name>] [--view <id>]
+  vikunja.mjs projects [--json]
   vikunja.mjs start <task-id> --project <id> [--view <id>] [--comment <text>]
   vikunja.mjs done <task-id> --project <id> [--view <id>] [--comment <text>]
   vikunja.mjs label-add <task-id> --label <id>
@@ -490,6 +492,65 @@ try {
         null,
         2,
       ));
+      break;
+    }
+
+    case 'transfer': {
+      // Cross-project move: project_id lives on the task (full-body POST), but the bucket
+      // assignment is per-view, so the destination project's bucket must be set afresh.
+      // Read the task, then resolve the destination bucket BEFORE mutating, so a bad name
+      // fails with nothing moved. A done task defaults to the done bucket: moving it out of
+      // a view's done bucket can make Vikunja reopen it (done_bucket_id semantics).
+      const id = positiveInt(positional[0], 'task id');
+      const project = positiveInt(required(options, 'project'), 'project id');
+      const task = await getTask(id, false);
+      const from = task.project_id;
+      if (from === project) throw new Error(`Task ${id} is already in project ${project}; use move`);
+      const destination = await resolveBucket(
+        project,
+        options.view,
+        options.bucket ?? (task.done ? 'done' : 'todo'),
+      );
+      task.project_id = project;
+      const updated = await http('POST', `/tasks/${id}`, task);
+      if (updated.project_id !== project) {
+        throw new Error(`Task ${id} still reports project ${updated.project_id} after the update`);
+      }
+      let moved;
+      try {
+        moved = await moveTaskTo(id, project, destination);
+      } catch (error) {
+        throw new Error(
+          `Task ${id} WAS moved to project ${project}, but the bucket assignment failed: ` +
+            `${error instanceof Error ? error.message : String(error)}. ` +
+            `Finish with: move ${id} --project ${project} --bucket <name>`,
+        );
+      }
+      const after = await getTask(id, false);
+      console.log(JSON.stringify({
+        task: id, from_project: from, to_project: project, done: after.done, moved,
+      }, null, 2));
+      break;
+    }
+
+    case 'projects': {
+      const all = [];
+      for (let page = 1; ; page += 1) {
+        const query = new URLSearchParams({ per_page: '50', page: String(page), is_archived: 'true' });
+        // Negative ids are pseudo-projects (favorites, saved filters) appended to every page.
+        const real = (await http('GET', `/projects?${query}`)).filter((p) => p.id > 0);
+        all.push(...real);
+        if (real.length < 50) break;
+      }
+      if (options.json) {
+        console.log(JSON.stringify(all.map(({ id, title, parent_project_id, is_archived }) => ({
+          id, title, parent_project_id, is_archived,
+        })), null, 2));
+      } else {
+        for (const p of all) {
+          console.log(`${p.id}\tparent=${p.parent_project_id}\t${p.is_archived ? 'archived' : 'active'}\t${p.title}`);
+        }
+      }
       break;
     }
 
