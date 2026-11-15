@@ -134,7 +134,7 @@ A hook entry is a JSON object inside its event's array. For shared entries, just
 ]
 ```
 
-Several conditionals can follow one another on the same closing line, each carrying its own leading comma; serp's `.chezmoi.hostname` is `serpentii`, not `serp`. A script registered on more than one host must not assume one host's tooling (the firewall reminder checks for wanda's `config-commit` wrapper and falls back to `etckeeper commit`; the service-owned-files blocker keeps one `SERVICE_USERS` list for both hosts). Render-check every branch (step 4) after changing a conditional.
+Several conditionals can follow one another on the same closing line, each carrying its own leading comma; serp's `.chezmoi.hostname` is `serpentii`, not `serp`. A script registered on more than one host must not assume one host's tooling (the firewall reminder gives the same path-scoped `/etc` commit advice on both hosts and never recommends wanda's `config-commit`, which runs `git add -A` in `/etc` and `/opt/services`, and in practice it fires only for eric-writable paths containing "nftables", because an Edit/Write of a root-owned live file fails before PostToolUse; the service-owned-files blocker keeps one `SERVICE_USERS` list for both hosts). Render-check every branch (step 4) after changing a conditional.
 
 The `{{ if ... }},` pattern puts the comma *inside* the conditional so the shared entry is always valid JSON on its own, and the wanda branch contributes a leading comma + its entries.
 
