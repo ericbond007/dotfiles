@@ -6,7 +6,7 @@ description: >-
   health check, a Prometheus exporter, an Uptime Kuma monitor, or a systemd
   timer's liveness alerting. The fleet's split is non-obvious and easy to get
   wrong: blackbox-exporter is the single ALERT engine, Uptime Kuma is a
-  status-page UI ONLY, and enabled-but-inactive timers die silently. Trigger
+  status-page UI ONLY (its own email stays only on the KEEP_EMAIL monitors), and enabled-but-inactive timers die silently. Trigger
   this whenever Dave mentions monitoring, alerting, blackbox, "wire it into
   the Claw / Alertmanager", a health check, an uptime monitor, a Prometheus
   probe/exporter, or a systemd timer that must not silently die. Also holds
@@ -59,6 +59,11 @@ Pattern after the existing `http_login` (webmail) and `http_jailbeat` (public ja
 
 ### Reloading after a config edit
 
+**Validate before the HUP:**
+- Prometheus: `docker exec -i prometheus-prometheus-1 sh -c 'cat > /tmp/p.yml && promtool check config --lint-fatal /tmp/p.yml' < candidate`, judged by promtool's own exit code.
+- blackbox: its container is read-only, so run `--config.check` in a throwaway container from the same image. It rejects bad regexes and unknown fields, but **not** a bad prober name.
+- **After** the blackbox HUP, calibrate each new module on a known-good and a known-bad target with `curl '127.0.0.1:9115/probe?module=M&target=T'`; only a loaded module answers.
+
 Both run as Docker containers under `/opt/services` and **reload config on SIGHUP without restarting** — signal them, don't bounce them:
 
 ```bash
@@ -74,10 +79,6 @@ Two traps (2026-11-08, VK #2461):
 - **`prometheus.yml` and `blackbox.yml` are single-file bind mounts.** An editor save-as, `mv` or `install` replaces the inode, and the container keeps reading the old file. Write in place (`cat new > file`) and check the in-container sha (`docker exec … sha256sum /etc/prometheus/prometheus.yml`).
 - **Read the reload result from `:9090/metrics` (or `:9115/metrics`) directly.** A PromQL query of `prometheus_config_last_reload_success_timestamp_seconds` shows the last *self-scrape*, which can lag the reload by a scrape interval.
 
-Validate before the HUP:
-- Prometheus: `docker exec -i prometheus-prometheus-1 sh -c 'cat > /tmp/p.yml && promtool check config --lint-fatal /tmp/p.yml' < candidate`, judged by promtool's own exit code.
-- blackbox: its container is read-only, so run `--config.check` in a throwaway container from the same image. It rejects bad regexes and unknown fields, but **not** a bad prober name, so calibrate each new module on a known-good and a known-bad target with `curl '127.0.0.1:9115/probe?module=M&target=T'`.
-
 ### SSO-gated content checks
 
 Kuma **cannot** auth through Authelia — its axios client strips the reserved `Proxy-Authorization` header, so requests arrive `<anonymous>`. Blackbox does **not** strip it. So for an authenticated content check behind SSO, use a blackbox probe carrying the header + a dedicated lldap service account — not Kuma. (For Traefik specifically, router data is already in Prom as `traefik_router_requests_total` — don't duplicate it.)
@@ -88,11 +89,13 @@ Add a monitor at `uptime.ericbond.net` for the human dashboard — `uptime-kuma-
 
 **Kuma's own email (VK #2461, 2026-11-08).** Kuma's SMTP notification mails Dave directly, past Alertmanager and every silence (6 mails during the 2026-11-08 failover drills). So:
 - "Email" is not the default for new monitors.
-- It stays bound only to the monitors named in `KEEP_EMAIL` in `/opt/services/uptime-kuma/scripts/bootstrap.py`. Today that is 17 "Prometheus" (nothing else sees Prometheus down) and 24 "jailbeat error-rate synthetic" (≥ 2 of 12 cache-busted 5xx, which no blackbox probe sees).
+- It stays bound only to the monitors named in `KEEP_EMAIL` in `/opt/services/uptime-kuma/scripts/bootstrap.py`. Today that is 17 "Prometheus" (nothing else sees Prometheus down), 43 "Alertmanager" (Prometheus cannot deliver an alert about Alertmanager through Alertmanager; VK #2541, 2026-11-18) and 24 "jailbeat error-rate synthetic" (≥ 2 of 12 cache-busted 5xx, which no blackbox probe sees).
 - Don't bind it to a new monitor. Give the check a blackbox probe instead.
 - The bootstrap is the declarative source. Edit it, run `--dry-run`, then run it.
 - uptime_kuma_api 1.2.1 takes `notificationIDList` as a **list of ids**: its input conversion turns every element or dict key into `{id: True}`, so a dict `{id: False}` **binds**.
-- Monitors made in the UI can carry `dns_resolve_type` NULL, which the library rejects on edit. The bootstrap pre-checks every edit and sends nothing if one fails.
+- Monitors made in the UI can carry `dns_resolve_type` NULL, which the library rejects on edit. The bootstrap fills in `A` for the monitors it doesn't manage.
+- The bootstrap pre-checks every planned monitor edit and create locally, the way the library will check it, and changes nothing if one fails. Two limits: it still creates a missing "Email" notification first, and it can't pre-run Kuma's server-side checks, so a server rejection can leave a partial run ("Done with N failure(s)").
+- A real run also rewrites the monitors it manages back to its spec, undoing UI edits. Read the dry run's "spec differs from live" lines first.
 
 ## 3. Prometheus metrics
 
@@ -147,6 +150,10 @@ Applies to any alert on openclaw, incident-triage-receiver, Alertmanager itself,
 - **And the route.** Inside `alertmanager-alertmanager-1`, run `amtool config routes test --alertmanager.url=http://localhost:9093 --verify.receivers=<expected> <its full labelset>`. Copy the labels from the `/api/v2/alerts` entry, including `cluster`, `instance` and `job`. That entry's `receivers[].name` is a second, live check. It must exit 0. Without `--verify.receivers` it exits 0 even when it prints the wrong receiver.
 - **The email hop itself** is proven by real alerts arriving. `AlertmanagerEmailDeliveryFailing` watches only the Alertmanager → Postfix hand-off, and it pages through the very path it watches. No test page.
 - **Real problems still email as normal**, provided the silence stays narrow and short.
+- **A silence does not stop Uptime Kuma's own email** (§ 2, `KEEP_EMAIL`). Monitors 17 "Prometheus", 43 "Alertmanager" and 24 "jailbeat error-rate synthetic" mail Dave directly. Before a drill or planned stop that could push one of them to DOWN, pause it in Kuma (or set a Kuma maintenance window) and resume it after; for a wanda reboot or upgrade window, pause all three.
+  - 17 and 43 check every 60 s. 17 goes DOWN, and emails, on its 2nd failed check (60–120 s into an outage); 43 on its 3rd (120–180 s). A check that hangs to its 48 s timeout adds up to 48 s. So pause 17 before any Prometheus stop that may exceed ~30 s, and 43 before any Alertmanager stop that may exceed ~90 s.
+  - 24 emails if a drill makes it fail twice in a row.
+  - In the 2026-11-08 D3 re-run, wanda-local DNS failures put monitor 17 in PENDING for one check.
 
 ## Done checklist for a new service
 
